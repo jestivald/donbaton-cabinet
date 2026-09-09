@@ -33,6 +33,7 @@ export function canBuyTraffic(
 ): boolean {
   const category = networkCategory(subscription.network_category);
   if (category === 'wifi') return false;
-  if (category === 'wifi_lte') return subscription.lte_quota != null;
+  if (category === 'wifi_lte')
+    return subscription.lte_quota != null && !subscription.lte_quota.is_unlimited;
   return subscription.traffic_limit_gb > 0;
 }

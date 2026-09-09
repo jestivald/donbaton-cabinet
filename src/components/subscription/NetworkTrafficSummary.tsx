@@ -18,6 +18,16 @@ export function NetworkTrafficSummary({
   const percent =
     quota && totalBytes > 0 ? Math.min(100, Math.max(0, (quota.used_bytes / totalBytes) * 100)) : 0;
   const resetDate = quota?.period_ends_at ? new Date(quota.period_ends_at) : null;
+  const legacyPeriod = quota?.period_mode?.startsWith('legacy_');
+  const legacyUntil =
+    legacyPeriod && quota?.legacy_compatibility_until
+      ? new Date(quota.legacy_compatibility_until)
+      : null;
+  const legacyPoolBytes = Math.max(0, quota?.legacy_pool_bytes ?? 0);
+  const includedBytes = Math.max(0, (quota?.limit_bytes ?? 0) - legacyPoolBytes);
+  const legacyPoolExpiry = quota?.legacy_pool_expires_at
+    ? new Date(quota.legacy_pool_expires_at)
+    : null;
   const nextTopupExpiry = quota?.topups
     ?.filter((topup) => topup.remaining_bytes > 0)
     .map((topup) => new Date(topup.expires_at))
@@ -31,15 +41,17 @@ export function NetworkTrafficSummary({
         <span className="text-dark-300">Wi-Fi</span>
         <span className="font-medium text-dark-100">{t('subscription.network.unlimited')}</span>
       </div>
-      {category === 'wifi_lte' &&
+      {(category === 'wifi_lte' || quota?.has_carried_lte) &&
         (quota ? (
           <div className="space-y-2">
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
               <span className="text-dark-300">LTE</span>
               <span className="font-medium tabular-nums text-dark-100">
-                {t('subscription.network.remaining', {
-                  traffic: formatBytes(quota.remaining_bytes),
-                })}
+                {quota.is_unlimited
+                  ? t('subscription.network.unlimited')
+                  : t('subscription.network.remaining', {
+                      traffic: formatBytes(quota.remaining_bytes),
+                    })}
               </span>
             </div>
             {quota.accounting_state && quota.accounting_state !== 'ready' && (
@@ -51,47 +63,94 @@ export function NetworkTrafficSummary({
                 )}
               </p>
             )}
-            <div
-              role="progressbar"
-              aria-label={t('subscription.network.lteUsage')}
-              aria-valuenow={Math.round(percent)}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuetext={t('subscription.network.used', {
-                used: formatBytes(quota.used_bytes),
-                total: formatBytes(totalBytes),
-              })}
-              className="h-1.5 overflow-hidden rounded-full bg-dark-700/40"
-            >
+            {!quota.is_unlimited && (
               <div
-                className={`h-full rounded-full transition-all ${quota.exhausted ? 'bg-warning-400' : 'bg-accent-400'}`}
-                style={{ width: `${percent}%` }}
-              />
-            </div>
-            <div className="flex flex-wrap justify-between gap-1 text-xs text-dark-400">
-              <span>
-                {t('subscription.network.included', { traffic: formatBytes(quota.limit_bytes) })}
-              </span>
-              {quota.topup_bytes > 0 && (
-                <span>
-                  {t('subscription.network.added', { traffic: formatBytes(quota.topup_bytes) })}
-                </span>
+                role="progressbar"
+                aria-label={t('subscription.network.lteUsage')}
+                aria-valuenow={Math.round(percent)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuetext={t('subscription.network.used', {
+                  used: formatBytes(quota.used_bytes),
+                  total: formatBytes(totalBytes),
+                })}
+                className="h-1.5 overflow-hidden rounded-full bg-dark-700/40"
+              >
+                <div
+                  className={`h-full rounded-full transition-all ${quota.exhausted ? 'bg-warning-400' : 'bg-accent-400'}`}
+                  style={{ width: `${percent}%` }}
+                />
+              </div>
+            )}
+            {!quota.is_unlimited && (
+              <div className="flex flex-wrap justify-between gap-1 text-xs text-dark-400">
+                {(legacyPeriod || includedBytes > 0) && (
+                  <span>
+                    {t(
+                      legacyPeriod
+                        ? 'subscription.network.carriedAllowance'
+                        : 'subscription.network.included',
+                      {
+                        traffic: formatBytes(includedBytes),
+                      },
+                    )}
+                  </span>
+                )}
+                {quota.topup_bytes > 0 && (
+                  <span>
+                    {t('subscription.network.added', { traffic: formatBytes(quota.topup_bytes) })}
+                  </span>
+                )}
+              </div>
+            )}
+            {!quota.is_unlimited && legacyPoolBytes > 0 && (
+              <div className="space-y-1 text-xs text-dark-400">
+                <p>
+                  {t('subscription.network.carriedAllowance', {
+                    traffic: formatBytes(legacyPoolBytes),
+                  })}
+                </p>
+                {legacyPoolExpiry && Number.isFinite(legacyPoolExpiry.getTime()) && (
+                  <p>
+                    {t('subscription.network.legacyPoolExpiry', {
+                      date: legacyPoolExpiry.toLocaleDateString(uiLocale()),
+                    })}
+                  </p>
+                )}
+              </div>
+            )}
+            {legacyUntil && Number.isFinite(legacyUntil.getTime()) && (
+              <p className="text-xs text-dark-400">
+                {t('subscription.network.legacyUntil', {
+                  date: legacyUntil.toLocaleDateString(uiLocale()),
+                })}
+              </p>
+            )}
+            {quota.renewal_requires_expiry && (
+              <p className="text-xs text-dark-400">
+                {t('subscription.network.legacyRenewalAfterExpiry')}
+              </p>
+            )}
+            {resetDate &&
+              Number.isFinite(resetDate.getTime()) &&
+              quota.period_mode !== 'legacy_no_reset' &&
+              quota.period_mode !== 'trial' &&
+              (legacyPeriod || includedBytes > 0) &&
+              !quota.is_unlimited && (
+                <p className="text-xs text-dark-400">
+                  {t('subscription.network.resetDate', {
+                    date: resetDate.toLocaleDateString(uiLocale()),
+                  })}
+                </p>
               )}
-            </div>
-            {resetDate && Number.isFinite(resetDate.getTime()) && (
-              <p className="text-xs text-dark-400">
-                {t('subscription.network.resetDate', {
-                  date: resetDate.toLocaleDateString(uiLocale()),
-                })}
-              </p>
-            )}
-            {quota.next_period_limit_bytes != null && (
-              <p className="text-xs text-dark-400">
-                {t('subscription.network.nextAllowance', {
-                  traffic: formatBytes(quota.next_period_limit_bytes),
-                })}
-              </p>
-            )}
+            {quota.next_period_limit_bytes != null &&
+              (category === 'wifi_lte' || quota.next_period_limit_bytes > 0) && (
+                <p className="text-xs text-dark-400">
+                  {t('subscription.network.nextAllowance', {
+                    traffic: formatBytes(quota.next_period_limit_bytes),
+                  })}
+                </p>
+              )}
             {nextTopupExpiry && (
               <p className="text-xs text-dark-400">
                 {t('subscription.network.topupExpiry', {

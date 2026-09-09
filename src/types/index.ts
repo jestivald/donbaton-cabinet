@@ -85,9 +85,30 @@ export interface LteQuota {
   topup_bytes: number;
   period_ends_at: string | null;
   exhausted: boolean;
-  accounting_state?: 'pending' | 'ready' | 'stale' | 'missing' | 'regressed' | 'identity_changed';
+  accounting_state?:
+    | 'pending'
+    | 'ready'
+    | 'stale'
+    | 'missing'
+    | 'regressed'
+    | 'identity_changed'
+    | 'epoch_mismatch'
+    | 'telemetry_unavailable'
+    | 'prepared';
   last_observed_at?: string | null;
   next_period_limit_bytes?: number | null;
+  legacy_compatibility_until?: string | null;
+  period_mode?:
+    | 'trial'
+    | 'legacy_calendar'
+    | 'legacy_no_reset'
+    | 'rolling_30_days'
+    | 'rolling_30_days_with_legacy_pool';
+  is_unlimited?: boolean;
+  renewal_requires_expiry?: boolean;
+  has_carried_lte?: boolean;
+  legacy_pool_bytes?: number;
+  legacy_pool_expires_at?: string | null;
   topups?: Array<{ remaining_bytes: number; expires_at: string }>;
 }
 

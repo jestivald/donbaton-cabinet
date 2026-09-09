@@ -211,6 +211,37 @@ function traffic(subscription: Pick<Subscription, 'network_category' | 'lte_quot
 }
 
 describe('separate LTE allowance', () => {
+  it('preserves the paid compatibility end without promising a refill for NO_RESET or unlimited', () => {
+    const subscription = {
+      network_category: 'wifi_lte' as const,
+      lte_quota: {
+        limit_bytes: 10 * 1024 ** 3,
+        topup_bytes: 0,
+        used_bytes: 8 * 1024 ** 3,
+        remaining_bytes: 2 * 1024 ** 3,
+        period_ends_at: '2026-10-07T12:00:00Z',
+        legacy_compatibility_until: '2026-10-07T12:00:00Z',
+        period_mode: 'legacy_no_reset' as const,
+        exhausted: false,
+      },
+    };
+    const { rerender } = render(traffic(subscription));
+    expect(screen.getByText('Осталось 2 ГБ')).toBeTruthy();
+    expect(screen.getByText('Перенесённый пакет: 10 ГБ')).toBeTruthy();
+    expect(screen.getByText('Прежние оплаченные условия действуют до 07.10.2026')).toBeTruthy();
+    expect(screen.queryByText(/обновится/)).toBeNull();
+    rerender(
+      traffic({
+        ...subscription,
+        lte_quota: { ...subscription.lte_quota, is_unlimited: true, remaining_bytes: 0 },
+      }),
+    );
+    expect(screen.getAllByText('Безлимит')).toHaveLength(2);
+    expect(screen.queryByText(/Осталось/)).toBeNull();
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    expect(screen.queryByText(/обновится/)).toBeNull();
+  });
+
   it('shows the actual base, top-up, remainder and reset date without double-counting', () => {
     const gb = 1024 ** 3;
     render(

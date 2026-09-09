@@ -1720,7 +1720,8 @@ export default function Subscription() {
       {subscription &&
         (subscription.is_active || subscription.is_limited) &&
         !subscription.is_trial &&
-        (subscription.device_limit !== 0 || canBuyTraffic(subscription)) && (
+        ((!networkCategory(subscription.network_category) && subscription.device_limit !== 0) ||
+          canBuyTraffic(subscription)) && (
           <div
             className="relative overflow-hidden rounded-3xl"
             style={{
@@ -1734,7 +1735,7 @@ export default function Subscription() {
               {t('subscription.additionalOptions.title')}
             </h2>
 
-            {subscription.device_limit !== 0 && (
+            {!networkCategory(subscription.network_category) && subscription.device_limit !== 0 && (
               <>
                 {/* Buy Devices */}
                 <DeviceTopupSheet

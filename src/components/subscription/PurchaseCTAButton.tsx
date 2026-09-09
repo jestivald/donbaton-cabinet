@@ -25,6 +25,14 @@ export default function PurchaseCTAButton({
   // Daily tariffs renew automatically — no manual renewal button needed in multi-tariff
   if (isMultiTariff && isDaily && !isExpired) return null;
 
+  if (!isExpired && subscription?.lte_quota?.renewal_requires_expiry) {
+    return (
+      <p className="rounded-2xl border border-dark-700/40 px-5 py-4 text-sm text-dark-400">
+        {t('subscription.network.legacyRenewalAfterExpiry')}
+      </p>
+    );
+  }
+
   const accentColor = isExpired ? 'rgb(var(--color-critical-500))' : 'rgb(var(--color-accent-400))';
 
   const buttonText = isExpired
