@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { tariffsApi, type TariffListItem } from '../api/tariffs';
+import { networkCategory } from '../components/subscription/networkCategory';
 import { useDestructiveConfirm, useNotify } from '@/platform';
 import { usePlatform } from '../platform/hooks/usePlatform';
 import {
@@ -52,6 +53,7 @@ function SortableTariffCard({
   onToggleTrial,
 }: SortableTariffCardProps) {
   const { t } = useTranslation();
+  const category = networkCategory(tariff.network_category);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: tariff.id,
   });
@@ -123,6 +125,7 @@ function SortableTariffCard({
                     {t('admin.tariffs.currencyPerDay')}
                   </span>
                 )}
+                {category && <span>{t(`subscription.network.${category}`)}</span>}
                 <span>
                   {tariff.traffic_limit_gb === 0
                     ? t('admin.tariffs.unlimited')
@@ -151,17 +154,19 @@ function SortableTariffCard({
                 {tariff.is_active ? <CheckIcon /> : <XIcon />}
               </button>
 
-              <button
-                onClick={onToggleTrial}
-                className={`rounded-lg p-2 transition-colors ${
-                  tariff.is_trial_available
-                    ? 'bg-accent-500/20 text-accent-400 hover:bg-accent-500/30'
-                    : 'bg-dark-700 text-dark-400 hover:bg-dark-600'
-                }`}
-                title={t('admin.tariffs.toggleTrial')}
-              >
-                <GiftIcon />
-              </button>
+              {!category && (
+                <button
+                  onClick={onToggleTrial}
+                  className={`rounded-lg p-2 transition-colors ${
+                    tariff.is_trial_available
+                      ? 'bg-accent-500/20 text-accent-400 hover:bg-accent-500/30'
+                      : 'bg-dark-700 text-dark-400 hover:bg-dark-600'
+                  }`}
+                  title={t('admin.tariffs.toggleTrial')}
+                >
+                  <GiftIcon />
+                </button>
+              )}
 
               <button
                 onClick={onEdit}

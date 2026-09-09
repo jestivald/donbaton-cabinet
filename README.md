@@ -1,3 +1,7 @@
+> Форк ДонБатон на v1.71.1: вкладки «Только Wi-Fi» / «Wi-Fi + LTE», отдельный остаток LTE и докупки.
+> Требуется [соответствующая ветка бота](https://github.com/sup-vpn/donbaton-bot/tree/codex/wifi-lte-tariffs); [условия запуска и проект тарифов](https://github.com/sup-vpn/donbaton-bot/blob/codex/wifi-lte-tariffs/docs/DONBATON.md).
+> Изменения находятся в ветке `codex/wifi-lte-tariffs`. Для этого кандидата собирайте исходники (`npm ci`, `npm run build`): готовый upstream-образ ниже их не содержит.
+
 # Bedolaga Cabinet - Web Interface
 
 Веб-интерфейс личного кабинета для VPN бота на базе [Remnawave Bedolaga Telegram Bot v3.33.0+](https://github.com/BEDOLAGA-DEV/remnawave-bedolaga-telegram-bot).

@@ -1,3 +1,5 @@
+import { useId, useState } from 'react';
+import * as Tabs from '@radix-ui/react-tabs';
 import { useTranslation } from 'react-i18next';
 import { BestValueBadge } from '../BestValueBadge';
 import { useNavigate } from 'react-router';
@@ -8,6 +10,13 @@ import { dailyPriceQuote } from './dailyPrice';
 import { getGlassColors } from '../../../utils/glassTheme';
 import { ArrowDownIcon, DevicesIcon, RestartIcon } from '@/components/icons';
 import type { Tariff, Subscription, PurchaseOptions } from '../../../types';
+import {
+  defaultTariffCategory,
+  networkCategory,
+  tariffCategory,
+  type TariffCategoryTab,
+} from '../networkCategory';
+import { TariffNetworkDetails } from '../TariffNetworkDetails';
 
 // ──────────────────────────────────────────────────────────────────
 // TariffPickerGrid
@@ -20,8 +29,8 @@ import type { Tariff, Subscription, PurchaseOptions } from '../../../types';
 //     per-tariff CTAs differentiated by user state (extend / switch /
 //     purchase / legacy renewal)
 //
-// Owns nothing — pure presentation that calls back into the parent
-// for selection (`onSelectTariff`) and switch (`onSwitchTariff`).
+// Owns the category tab; calls back into the parent for selection
+// (`onSelectTariff`) and switch (`onSwitchTariff`).
 // ──────────────────────────────────────────────────────────────────
 
 export interface TariffPickerGridProps {
@@ -49,6 +58,41 @@ export function TariffPickerGrid({
   const g = getGlassColors(isDark);
   const { formatAmount, currencySymbol } = useCurrency();
   const { applyPromoDiscount } = usePromoDiscount();
+  const tabId = useId();
+  const [selectedCategory, setSelectedCategory] = useState<TariffCategoryTab | null>(null);
+  const eligibleTariffs = tariffs.filter((tariff) => {
+    if (isMultiTariff && tariff.is_purchased) return false;
+    return !(subscription?.is_trial && tariff.name.toLowerCase().includes('trial'));
+  });
+  const availableCategories = new Set(eligibleTariffs.map(tariffCategory));
+  const hasCategories = availableCategories.has('wifi') || availableCategories.has('wifi_lte');
+  const activeCategory =
+    selectedCategory && availableCategories.has(selectedCategory)
+      ? selectedCategory
+      : defaultTariffCategory(eligibleTariffs, subscription);
+  const visibleTariffs = hasCategories
+    ? eligibleTariffs.filter((tariff) => tariffCategory(tariff) === activeCategory)
+    : eligibleTariffs;
+  const categoryTabs: TariffCategoryTab[] = availableCategories.has('legacy')
+    ? ['wifi', 'wifi_lte', 'legacy']
+    : ['wifi', 'wifi_lte'];
+  const currentCategory =
+    networkCategory(subscription?.network_category) ??
+    networkCategory(
+      tariffs.find((tariff) => tariff.is_current || tariff.id === subscription?.tariff_id)
+        ?.network_category,
+    );
+  const hasActivePaidSubscription =
+    !isMultiTariff &&
+    subscription &&
+    !subscription.is_trial &&
+    !subscription.is_expired &&
+    !(
+      purchaseOptions &&
+      'subscription_is_expired' in purchaseOptions &&
+      purchaseOptions.subscription_is_expired
+    ) &&
+    (subscription.is_active || subscription.is_limited);
 
   const formatPrice = (kopeks: number) =>
     kopeks === 0
@@ -56,7 +100,10 @@ export function TariffPickerGrid({
       : `${formatAmount(kopeks / 100)} ${currencySymbol}`;
 
   return (
-    <>
+    <Tabs.Root
+      value={activeCategory}
+      onValueChange={(value) => setSelectedCategory(value as TariffCategoryTab)}
+    >
       {/* Promo group discount banner */}
       {tariffs.some((tariff) => tariff.promo_group_name) && (
         <div className="mb-4 flex items-center gap-3 rounded-xl border border-success-500/30 bg-success-500/10 p-3">
@@ -88,6 +135,40 @@ export function TariffPickerGrid({
         </div>
       )}
 
+      {hasCategories && (
+        <div className="mb-5 space-y-3">
+          <Tabs.List
+            aria-label={t('subscription.network.chooseCategory')}
+            className="flex gap-1 rounded-xl border border-dark-700/50 bg-dark-800/50 p-1"
+          >
+            {categoryTabs.map((category) => (
+              <Tabs.Trigger
+                key={category}
+                value={category}
+                id={`${tabId}-${category}`}
+                aria-controls={`${tabId}-tariffs`}
+                disabled={!availableCategories.has(category)}
+                className="flex-1 rounded-lg px-2 py-3 text-sm font-medium text-dark-400 transition-colors hover:text-dark-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-400 disabled:cursor-not-allowed disabled:opacity-40 data-[state=active]:bg-accent-500 data-[state=active]:text-on-accent"
+              >
+                {t(`subscription.network.${category}`)}
+              </Tabs.Trigger>
+            ))}
+          </Tabs.List>
+          {activeCategory !== 'legacy' && (
+            <p className="text-sm text-dark-300">
+              {t(`subscription.network.${activeCategory}Description`)}
+            </p>
+          )}
+          <p className="text-xs text-dark-400">{t('subscription.network.explanation')}</p>
+        </div>
+      )}
+
+      {hasActivePaidSubscription && (hasCategories || currentCategory) && (
+        <p id={`${tabId}-switch-policy`} className="mb-4 text-sm text-dark-400">
+          {t('subscription.network.switchUnavailable')}
+        </p>
+      )}
+
       {/* Tariff Grid */}
       {isMultiTariff &&
         purchaseOptions &&
@@ -115,16 +196,13 @@ export function TariffPickerGrid({
             </button>
           </div>
         )}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {[...tariffs]
-          .filter((tariff) => {
-            // In multi-tariff mode: hide already purchased tariffs
-            if (isMultiTariff && tariff.is_purchased) return false;
-            if (subscription?.is_trial && tariff.name.toLowerCase().includes('trial')) {
-              return false;
-            }
-            return true;
-          })
+      <div
+        role={hasCategories ? 'tabpanel' : undefined}
+        id={`${tabId}-tariffs`}
+        aria-labelledby={hasCategories ? `${tabId}-${activeCategory}` : undefined}
+        className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+      >
+        {[...visibleTariffs]
           .sort((a, b) => {
             const aIsCurrent = a.is_current || a.id === subscription?.tariff_id;
             const bIsCurrent = b.is_current || b.id === subscription?.tariff_id;
@@ -157,6 +235,10 @@ export function TariffPickerGrid({
               (subscription.is_active || subscription.is_limited);
             const isLegacySubscription =
               subscription && !subscription.is_trial && !subscription.tariff_id;
+            const isNetworkSwitchBlocked =
+              hasActivePaidSubscription &&
+              !isCurrentTariff &&
+              (currentCategory || networkCategory(tariff.network_category));
 
             return (
               <div
@@ -188,7 +270,9 @@ export function TariffPickerGrid({
                 <div className="flex flex-wrap gap-4 text-sm">
                   <div className="flex items-center gap-1.5">
                     <ArrowDownIcon className="h-4 w-4 text-accent-400" />
-                    <span className="font-medium text-dark-200">{tariff.traffic_limit_label}</span>
+                    <span className="font-medium text-dark-200">
+                      <TariffNetworkDetails tariff={tariff} />
+                    </span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <DevicesIcon className="h-4 w-4 text-dark-400" />
@@ -198,14 +282,16 @@ export function TariffPickerGrid({
                         : t('subscription.devices', { count: tariff.device_limit })}
                     </span>
                   </div>
-                  {tariff.traffic_reset_mode && tariff.traffic_reset_mode !== 'NO_RESET' && (
-                    <div className="flex items-center gap-1.5">
-                      <RestartIcon className="h-4 w-4 text-dark-400" />
-                      <span className="text-dark-300">
-                        {t(`subscription.trafficReset.${tariff.traffic_reset_mode}`)}
-                      </span>
-                    </div>
-                  )}
+                  {!networkCategory(tariff.network_category) &&
+                    tariff.traffic_reset_mode &&
+                    tariff.traffic_reset_mode !== 'NO_RESET' && (
+                      <div className="flex items-center gap-1.5">
+                        <RestartIcon className="h-4 w-4 text-dark-400" />
+                        <span className="text-dark-300">
+                          {t(`subscription.trafficReset.${tariff.traffic_reset_mode}`)}
+                        </span>
+                      </div>
+                    )}
                 </div>
                 {/* Price info */}
                 <div className="mt-3 border-t border-dark-700/50 pt-3 text-sm text-dark-400">
@@ -291,6 +377,14 @@ export function TariffPickerGrid({
                         {t('subscription.extend')}
                       </button>
                     )
+                  ) : isNetworkSwitchBlocked ? (
+                    <button
+                      disabled
+                      aria-describedby={`${tabId}-switch-policy`}
+                      className="btn-secondary flex-1 py-2 text-sm disabled:opacity-50"
+                    >
+                      {t('subscription.network.afterExpiry')}
+                    </button>
                   ) : isLegacySubscription ? (
                     <button
                       onClick={() => onSelectTariff(tariff)}
@@ -318,6 +412,6 @@ export function TariffPickerGrid({
             );
           })}
       </div>
-    </>
+    </Tabs.Root>
   );
 }

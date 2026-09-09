@@ -1,4 +1,11 @@
 import apiClient from './client';
+import type { NetworkCategory } from '../types';
+
+interface NetworkTariffFields {
+  network_category?: NetworkCategory | null;
+  lte_traffic_limit_gb?: number | null;
+  lte_period_days?: number | null;
+}
 
 // Types
 export interface PeriodPrice {
@@ -26,7 +33,7 @@ export interface PromoGroupInfo {
   is_selected: boolean;
 }
 
-export interface TariffListItem {
+export interface TariffListItem extends NetworkTariffFields {
   id: number;
   name: string;
   description: string | null;
@@ -51,7 +58,7 @@ export interface TariffListResponse {
   total: number;
 }
 
-export interface TariffDetail {
+export interface TariffDetail extends NetworkTariffFields {
   id: number;
   name: string;
   description: string | null;
@@ -101,7 +108,7 @@ export interface TariffDetail {
   updated_at: string | null;
 }
 
-export interface TariffCreateRequest {
+export interface TariffCreateRequest extends NetworkTariffFields {
   name: string;
   description?: string;
   is_active?: boolean;
@@ -150,7 +157,7 @@ export interface ExternalSquadInfo {
   members_count: number;
 }
 
-export interface TariffUpdateRequest {
+export interface TariffUpdateRequest extends NetworkTariffFields {
   name?: string;
   description?: string;
   is_active?: boolean;

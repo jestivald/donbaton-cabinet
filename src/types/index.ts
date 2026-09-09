@@ -74,6 +74,23 @@ export interface TrafficPurchase {
   progress_percent: number;
 }
 
+/** An explicit server-access category; never inferred from the phone's network. */
+export type NetworkCategory = 'wifi' | 'wifi_lte';
+
+export interface LteQuota {
+  /** Included base allowance; top-ups are accounted for separately. */
+  limit_bytes: number;
+  used_bytes: number;
+  remaining_bytes: number;
+  topup_bytes: number;
+  period_ends_at: string | null;
+  exhausted: boolean;
+  accounting_state?: 'pending' | 'ready' | 'stale' | 'missing' | 'regressed' | 'identity_changed';
+  last_observed_at?: string | null;
+  next_period_limit_bytes?: number | null;
+  topups?: Array<{ remaining_bytes: number; expires_at: string }>;
+}
+
 export interface Subscription {
   id: number;
   status: string;
@@ -107,6 +124,8 @@ export interface Subscription {
   tariff_id?: number;
   tariff_name?: string;
   traffic_reset_mode?: string;
+  network_category?: NetworkCategory | null;
+  lte_quota?: LteQuota | null;
 }
 
 // Response wrapper for subscription status endpoint
@@ -132,6 +151,8 @@ export interface SubscriptionListItem {
   is_daily_paused?: boolean;
   autopay_enabled: boolean;
   connected_squads: string[] | null;
+  network_category?: NetworkCategory | null;
+  lte_quota?: LteQuota | null;
 }
 
 // Response from GET /cabinet/subscriptions (multi-tariff)
@@ -296,6 +317,9 @@ export interface Tariff {
   tier_level: number;
   traffic_limit_gb: number;
   traffic_limit_label: string;
+  network_category?: NetworkCategory | null;
+  lte_traffic_limit_gb?: number | null;
+  lte_period_days?: number | null;
   is_unlimited_traffic: boolean;
   device_limit: number;
   base_device_limit?: number;

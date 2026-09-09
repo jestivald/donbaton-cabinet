@@ -10,6 +10,8 @@ import { usePromoDiscount } from '../../../hooks/usePromoDiscount';
 import { dailyPriceQuote } from '../purchase/dailyPrice';
 import InsufficientBalancePrompt from '../../InsufficientBalancePrompt';
 import type { Tariff } from '../../../types';
+import { networkCategory } from '../networkCategory';
+import { TariffNetworkDetails } from '../TariffNetworkDetails';
 import { Skeleton, SkeletonGroup } from '../../ui/skeleton';
 
 // ──────────────────────────────────────────────────────────────────
@@ -170,6 +172,12 @@ export function SwitchTariffSheet({
                   <span>{switchPreview.remaining_days}</span>
                 </div>
               </div>
+
+              {targetTariff && networkCategory(targetTariff.network_category) && (
+                <div className="rounded-lg bg-dark-800/50 p-3 text-sm text-dark-200">
+                  <TariffNetworkDetails tariff={targetTariff} />
+                </div>
+              )}
 
               {isDailyTariff && (
                 <div className="rounded-lg border border-accent-500/30 bg-accent-500/10 p-3 text-center">

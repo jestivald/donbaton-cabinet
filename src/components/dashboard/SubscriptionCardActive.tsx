@@ -12,6 +12,8 @@ import { formatTraffic } from '../../utils/formatTraffic';
 import { getGlassColors } from '../../utils/glassTheme';
 import { CalendarIcon, RefreshIcon } from '@/components/icons';
 import type { Subscription } from '../../types';
+import { NetworkTrafficSummary } from '../subscription/NetworkTrafficSummary';
+import { networkCategory } from '../subscription/networkCategory';
 
 interface SubscriptionCardActiveProps {
   subscription: Subscription;
@@ -39,6 +41,7 @@ export default function SubscriptionCardActive({
   const usedPercent = trafficData?.traffic_used_percent ?? subscription.traffic_used_percent;
   const usedGb = trafficData?.traffic_used_gb ?? subscription.traffic_used_gb;
   const isUnlimited = trafficData?.is_unlimited ?? subscription.traffic_limit_gb === 0;
+  const category = networkCategory(subscription.network_category);
   const zone = useTrafficZone(usedPercent);
   const animatedPercent = useAnimatedNumber(usedPercent);
 
@@ -85,7 +88,11 @@ export default function SubscriptionCardActive({
               className="font-mono text-[11px] font-semibold uppercase tracking-widest"
               style={{ color: zone.mainVar, transition: 'color 0.6s ease' }}
             >
-              {isUnlimited ? t('dashboard.unlimited') : t(zone.labelKey)}
+              {category
+                ? t(`subscription.network.${category}`)
+                : isUnlimited
+                  ? t('dashboard.unlimited')
+                  : t(zone.labelKey)}
             </span>
             {subscription.is_trial && (
               <span className="inline-flex items-center gap-1 rounded-md border border-accent-400/25 bg-accent-400/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-widest text-accent-400">
@@ -111,46 +118,52 @@ export default function SubscriptionCardActive({
 
           {/* Title */}
           <h2 className="text-lg font-bold tracking-tight text-dark-50">
-            {t('dashboard.trafficUsageTitle')}
+            {t(category ? 'subscription.network.trafficTitle' : 'dashboard.trafficUsageTitle')}
           </h2>
         </div>
 
         {/* Big percentage / infinity */}
-        <div className="text-right">
-          {isUnlimited ? (
-            <>
-              <div
-                className="font-display text-[28px] font-extrabold leading-none tracking-tight"
-                style={{ color: zone.mainVar }}
-              >
-                &#8734;
-              </div>
-              <div className="mt-1 font-mono text-[11px] text-dark-400">
-                {formatTraffic(usedGb)} {t('dashboard.usedSuffix')}
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="font-display text-[38px] font-extrabold leading-none tracking-tight text-dark-50">
-                {animatedPercent.toFixed(0)}
-                <span className="ml-px text-lg font-medium text-dark-400">%</span>
-              </div>
-              <div className="mt-0.5 font-mono text-[11px] text-dark-400">
-                {formatTraffic(usedGb)} / {formatTraffic(subscription.traffic_limit_gb)}
-              </div>
-            </>
-          )}
-        </div>
+        {!category && (
+          <div className="text-right">
+            {isUnlimited ? (
+              <>
+                <div
+                  className="font-display text-[28px] font-extrabold leading-none tracking-tight"
+                  style={{ color: zone.mainVar }}
+                >
+                  &#8734;
+                </div>
+                <div className="mt-1 font-mono text-[11px] text-dark-400">
+                  {formatTraffic(usedGb)} {t('dashboard.usedSuffix')}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="font-display text-[38px] font-extrabold leading-none tracking-tight text-dark-50">
+                  {animatedPercent.toFixed(0)}
+                  <span className="ml-px text-lg font-medium text-dark-400">%</span>
+                </div>
+                <div className="mt-0.5 font-mono text-[11px] text-dark-400">
+                  {formatTraffic(usedGb)} / {formatTraffic(subscription.traffic_limit_gb)}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ─── Progress Bar ─── */}
       <div className="mb-6">
-        <TrafficProgressBar
-          usedGb={usedGb}
-          limitGb={subscription.traffic_limit_gb}
-          percent={usedPercent}
-          isUnlimited={isUnlimited}
-        />
+        {category ? (
+          <NetworkTrafficSummary subscription={subscription} />
+        ) : (
+          <TrafficProgressBar
+            usedGb={usedGb}
+            limitGb={subscription.traffic_limit_gb}
+            percent={usedPercent}
+            isUnlimited={isUnlimited}
+          />
+        )}
       </div>
 
       {/* ─── Connect Device Button ─── */}

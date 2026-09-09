@@ -1,10 +1,18 @@
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { subscriptionApi } from '../../../api/subscription';
-import { getErrorMessage } from '../../../utils/subscriptionHelpers';
+import { getErrorMessage, getInsufficientBalanceError } from '../../../utils/subscriptionHelpers';
 import InsufficientBalancePrompt from '../../InsufficientBalancePrompt';
 import { ChevronRightIcon } from '../../icons';
 import type { PurchaseOptions, Subscription } from '../../../types';
+import { formatTraffic } from '../../../utils/formatTraffic';
+import { useAuthStore } from '../../../store/auth';
+import {
+  completeLteTopupIntent,
+  rememberLteTopupIntent,
+  restoreLteTopupPackage,
+} from '../lteTopupIntent';
 
 // ──────────────────────────────────────────────────────────────────
 // Buy-traffic sheet. Self-owns the packages query + purchase mutation;
@@ -40,6 +48,27 @@ export function TrafficTopupSheet({
 }: TrafficTopupSheetProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const isLte = subscription.network_category === 'wifi_lte';
+  const userId = useAuthStore((state) => state.user?.id);
+  const [intentError, setIntentError] = useState<string | null>(null);
+  const hydratedScope = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isLte || userId == null) return;
+    const scope = `${userId}:${subscription.id}`;
+    if (hydratedScope.current === scope) return;
+    hydratedScope.current = scope;
+    const gb = restoreLteTopupPackage(userId, subscription.id);
+    if (gb != null) {
+      onSelectedTrafficPackageChange(gb);
+      onOpen();
+    }
+  }, [isLte, userId, subscription.id, onOpen, onSelectedTrafficPackageChange]);
+
+  const prepareIntent = (gb: number) => {
+    const intent = userId == null ? null : rememberLteTopupIntent(userId, subscription.id, gb);
+    if (!intent) throw new Error(t('subscription.network.intentStorageUnavailable'));
+    return intent;
+  };
 
   const formatPrice = (kopeks: number) => {
     const rubles = kopeks / 100;
@@ -53,16 +82,35 @@ export function TrafficTopupSheet({
   });
 
   const purchaseMutation = useMutation({
-    mutationFn: (gb: number) => subscriptionApi.purchaseTraffic(gb, subscriptionId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['subscription', subscriptionId] });
+    mutationFn: async (gb: number) => {
+      const selectedPackage = trafficPackages?.find((pkg) => pkg.gb === gb);
+      if (!selectedPackage) throw new Error(t('subscription.additionalOptions.trafficUnavailable'));
+      const intent = isLte ? prepareIntent(gb) : null;
+      const response = await subscriptionApi.purchaseTraffic(
+        gb,
+        subscriptionId,
+        intent?.requestId,
+        isLte ? selectedPackage.price_kopeks : undefined,
+      );
+      return { response, intent };
+    },
+    onSuccess: ({ intent }) => {
+      if (intent) completeLteTopupIntent(intent);
+      queryClient.invalidateQueries({ queryKey: ['subscription'] });
       queryClient.invalidateQueries({ queryKey: ['subscriptions-list'] });
       queryClient.invalidateQueries({ queryKey: ['balance'] });
       queryClient.invalidateQueries({ queryKey: ['traffic-packages', subscriptionId] });
       onClose();
       onSelectedTrafficPackageChange(null);
     },
+    onError: () => {
+      if (isLte) queryClient.invalidateQueries({ queryKey: ['traffic-packages', subscriptionId] });
+    },
   });
+  const balanceError = isLte ? getInsufficientBalanceError(purchaseMutation.error) : null;
+  const missingFromError = balanceError
+    ? (balanceError.missingAmount ?? balanceError.required - balanceError.balance)
+    : 0;
 
   if (!open) {
     return (
@@ -73,13 +121,21 @@ export function TrafficTopupSheet({
         <div className="flex items-center justify-between">
           <div>
             <div className="font-medium text-dark-100">
-              {t('subscription.additionalOptions.buyTraffic')}
+              {t(
+                isLte ? 'subscription.network.buyLte' : 'subscription.additionalOptions.buyTraffic',
+              )}
             </div>
             <div className="mt-1 text-sm text-dark-400">
-              {t('subscription.additionalOptions.currentTrafficLimit', {
-                limit: subscription.traffic_limit_gb,
-                used: subscription.traffic_used_gb.toFixed(1),
-              })}
+              {isLte
+                ? subscription.lte_quota
+                  ? t('subscription.network.remaining', {
+                      traffic: formatTraffic(subscription.lte_quota.remaining_bytes / 1024 ** 3),
+                    })
+                  : t('subscription.network.lteUnavailable')
+                : t('subscription.additionalOptions.currentTrafficLimit', {
+                    limit: subscription.traffic_limit_gb,
+                    used: subscription.traffic_used_gb.toFixed(1),
+                  })}
             </div>
           </div>
           <ChevronRightIcon className="text-dark-400" />
@@ -94,7 +150,11 @@ export function TrafficTopupSheet({
     >
       <div className="mb-4 flex items-center justify-between">
         <h3 className="font-medium text-dark-100">
-          {t('subscription.additionalOptions.buyTrafficTitle')}
+          {t(
+            isLte
+              ? 'subscription.network.buyLte'
+              : 'subscription.additionalOptions.buyTrafficTitle',
+          )}
         </h3>
         <button
           onClick={() => {
@@ -111,7 +171,9 @@ export function TrafficTopupSheet({
       <div
         className={`mb-4 rounded-lg p-2 text-xs ${isDark ? 'bg-dark-700/30 text-dark-500' : 'bg-champagne-300/40 text-champagne-600'}`}
       >
-        ⚠️ {t('subscription.additionalOptions.trafficWarning')}
+        {isLte
+          ? t('subscription.network.topupDescription')
+          : `⚠️ ${t('subscription.additionalOptions.trafficWarning')}`}
       </div>
 
       {!trafficPackages || trafficPackages.length === 0 ? (
@@ -124,7 +186,17 @@ export function TrafficTopupSheet({
             {trafficPackages.map((pkg) => (
               <button
                 key={pkg.gb}
-                onClick={() => onSelectedTrafficPackageChange(pkg.gb)}
+                onClick={() => {
+                  setIntentError(null);
+                  if (isLte) {
+                    try {
+                      prepareIntent(pkg.gb);
+                    } catch (error) {
+                      setIntentError(getErrorMessage(error));
+                    }
+                  }
+                  onSelectedTrafficPackageChange(pkg.gb);
+                }}
                 className={`rounded-xl border p-4 text-center transition-all ${
                   selectedTrafficPackage === pkg.gb
                     ? 'border-accent-500 bg-accent-500/10'
@@ -136,7 +208,7 @@ export function TrafficTopupSheet({
                 <div className="text-lg font-semibold text-dark-100">
                   {pkg.is_unlimited
                     ? '♾️ ' + t('subscription.additionalOptions.unlimited')
-                    : `${pkg.gb} ${t('common.units.gb')}`}
+                    : `${pkg.gb} ${t('common.units.gb')}${isLte ? ' LTE' : ''}`}
                 </div>
                 {pkg.discount_percent && pkg.discount_percent > 0 && (
                   <div className="mb-1">
@@ -175,22 +247,31 @@ export function TrafficTopupSheet({
 
               return (
                 <>
-                  {!hasEnoughBalance && missingAmount > 0 && (
+                  {!hasEnoughBalance && missingAmount > 0 && !intentError && (
                     <InsufficientBalancePrompt
                       missingAmountKopeks={missingAmount}
                       compact
                       className="mb-3"
-                      onBeforeTopUp={async () => {
-                        await subscriptionApi.saveTrafficCart(
-                          selectedTrafficPackage,
-                          subscriptionId,
-                        );
-                      }}
+                      onBeforeTopUp={
+                        isLte
+                          ? undefined
+                          : async () => {
+                              await subscriptionApi.saveTrafficCart(
+                                selectedTrafficPackage,
+                                subscriptionId,
+                              );
+                            }
+                      }
                     />
                   )}
                   <button
                     onClick={() => purchaseMutation.mutate(selectedTrafficPackage)}
-                    disabled={purchaseMutation.isPending || !hasEnoughBalance}
+                    disabled={
+                      purchaseMutation.isPending ||
+                      !hasEnoughBalance ||
+                      !selectedPkg ||
+                      !!intentError
+                    }
                     className="btn-primary w-full py-3"
                   >
                     {purchaseMutation.isPending ? (
@@ -200,9 +281,14 @@ export function TrafficTopupSheet({
                     ) : selectedPkg?.is_unlimited ? (
                       t('subscription.additionalOptions.buyUnlimited')
                     ) : (
-                      t('subscription.additionalOptions.buyTrafficGb', {
-                        gb: selectedTrafficPackage,
-                      })
+                      t(
+                        isLte
+                          ? 'subscription.network.buyLteGb'
+                          : 'subscription.additionalOptions.buyTrafficGb',
+                        {
+                          gb: selectedTrafficPackage,
+                        },
+                      )
                     )}
                   </button>
                 </>
@@ -213,6 +299,14 @@ export function TrafficTopupSheet({
             <div className="text-center text-sm text-error-400">
               {getErrorMessage(purchaseMutation.error)}
             </div>
+          )}
+          {balanceError && missingFromError > 0 && !intentError && (
+            <InsufficientBalancePrompt missingAmountKopeks={missingFromError} compact />
+          )}
+          {intentError && (
+            <p role="alert" className="text-sm text-error-400">
+              {intentError}
+            </p>
           )}
         </div>
       )}

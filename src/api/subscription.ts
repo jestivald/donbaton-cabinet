@@ -14,6 +14,8 @@ import type {
   AppConfig,
   SbpRecurringInfo,
   LavaRecurringInfo,
+  LteQuota,
+  NetworkCategory,
 } from '../types';
 
 /** Helper: build query params with optional subscription_id */
@@ -107,6 +109,8 @@ export const subscriptionApi = {
   purchaseTraffic: async (
     gb: number,
     subscriptionId?: number,
+    requestId?: string,
+    expectedPriceKopeks?: number,
   ): Promise<{
     message: string;
     gb_added: number;
@@ -114,7 +118,15 @@ export const subscriptionApi = {
   }> => {
     const response = await apiClient.post(
       '/cabinet/subscription/traffic',
-      ...bodyWithSubId({ gb, yandex_cid: getYandexCid() || undefined }, subscriptionId),
+      ...bodyWithSubId(
+        {
+          gb,
+          request_id: requestId,
+          expected_price_kopeks: expectedPriceKopeks,
+          yandex_cid: getYandexCid() || undefined,
+        },
+        subscriptionId,
+      ),
     );
     return response.data;
   },
@@ -161,6 +173,8 @@ export const subscriptionApi = {
     is_unlimited: boolean;
     lifetime_used_bytes?: number;
     lifetime_used_gb?: number;
+    network_category?: NetworkCategory | null;
+    lte_quota?: LteQuota | null;
   }> => {
     const response = await apiClient.post(
       '/cabinet/subscription/refresh-traffic',

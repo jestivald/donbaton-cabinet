@@ -18,6 +18,8 @@ import InsufficientBalancePrompt from '../components/InsufficientBalancePrompt';
 import { useCurrency } from '../hooks/useCurrency';
 import { useCloseOnSuccessNotification } from '../store/successNotification';
 import PurchaseCTAButton from '../components/subscription/PurchaseCTAButton';
+import { NetworkTrafficSummary } from '../components/subscription/NetworkTrafficSummary';
+import { canBuyTraffic, networkCategory } from '../components/subscription/networkCategory';
 import {
   CopyIcon,
   CheckIcon,
@@ -315,7 +317,8 @@ export default function Subscription() {
   const sbpQuery = useQuery({
     queryKey: ['sbp-recurring', subscriptionId],
     queryFn: () => subscriptionApi.getSbpRecurring(subscriptionId),
-    enabled: !!subscription && !subscription.is_trial,
+    enabled:
+      !!subscription && !subscription.is_trial && !networkCategory(subscription.network_category),
     retry: false,
     refetchInterval: (query) => (query.state.data?.status === 'PENDING' ? 8000 : false),
   });
@@ -390,7 +393,8 @@ export default function Subscription() {
   const lavaQuery = useQuery({
     queryKey: ['lava-recurring', subscriptionId],
     queryFn: () => subscriptionApi.getLavaRecurring(subscriptionId),
-    enabled: !!subscription && !subscription.is_trial,
+    enabled:
+      !!subscription && !subscription.is_trial && !networkCategory(subscription.network_category),
     retry: false,
     refetchInterval: (query) => (query.state.data?.status === 'PENDING' ? 8000 : false),
   });
@@ -709,6 +713,7 @@ export default function Subscription() {
           const usedGb = trafficData?.traffic_used_gb ?? subscription.traffic_used_gb;
           const isUnlimited =
             (trafficData?.is_unlimited ?? false) || subscription.traffic_limit_gb === 0;
+          const category = networkCategory(subscription.network_category);
           const connectedDevices = devicesData?.total ?? 0;
           const isAtDeviceLimit =
             subscription.device_limit > 0 && connectedDevices >= subscription.device_limit;
@@ -755,7 +760,11 @@ export default function Subscription() {
                       className="font-mono text-[11px] font-semibold uppercase tracking-widest"
                       style={{ color: zone.mainHex, transition: 'color 0.6s ease' }}
                     >
-                      {isUnlimited ? t('dashboard.unlimited') : t(zone.labelKey)}
+                      {category
+                        ? t(`subscription.network.${category}`)
+                        : isUnlimited
+                          ? t('dashboard.unlimited')
+                          : t(zone.labelKey)}
                     </span>
                   </div>
 
@@ -902,7 +911,9 @@ export default function Subscription() {
                             className="font-mono text-[12px] font-semibold"
                             style={{ color: 'rgb(var(--color-accent-400))' }}
                           >
-                            {subscription.traffic_limit_gb || '∞'} {t('common.units.gb')}
+                            {category
+                              ? t('subscription.network.wifiUnlimited')
+                              : `${subscription.traffic_limit_gb || '∞'} ${t('common.units.gb')}`}
                           </span>
                           <span className="text-[11px] text-dark-400">
                             {t('subscription.traffic')}
@@ -929,14 +940,16 @@ export default function Subscription() {
               <div className="mb-6">
                 <div className="mb-2.5 flex items-center justify-between">
                   <span className="text-[11px] font-medium uppercase tracking-wider text-dark-400">
-                    {t('subscription.traffic')}
+                    {t(category ? 'subscription.network.trafficTitle' : 'subscription.traffic')}
                   </span>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-[11px] text-dark-400">
-                      {isUnlimited
-                        ? formatTraffic(usedGb)
-                        : `${formatTraffic(usedGb)} / ${formatTraffic(subscription.traffic_limit_gb)}`}
-                    </span>
+                    {!category && (
+                      <span className="font-mono text-[11px] text-dark-400">
+                        {isUnlimited
+                          ? formatTraffic(usedGb)
+                          : `${formatTraffic(usedGb)} / ${formatTraffic(subscription.traffic_limit_gb)}`}
+                      </span>
+                    )}
                     <button
                       onClick={() => refreshTrafficMutation.mutate()}
                       disabled={refreshTrafficMutation.isPending || trafficRefreshCooldown > 0}
@@ -952,19 +965,25 @@ export default function Subscription() {
                     </button>
                   </div>
                 </div>
-                {subscription.traffic_reset_mode &&
-                  subscription.traffic_reset_mode !== 'NO_RESET' && (
-                    <div className="mb-2 text-[10px] text-dark-400">
-                      {t(`subscription.trafficReset.${subscription.traffic_reset_mode}`)}
-                    </div>
-                  )}
-                <TrafficProgressBar
-                  usedGb={usedGb}
-                  limitGb={subscription.traffic_limit_gb}
-                  percent={usedPercent}
-                  isUnlimited={isUnlimited}
-                  compact
-                />
+                {category ? (
+                  <NetworkTrafficSummary subscription={subscription} />
+                ) : (
+                  <>
+                    {subscription.traffic_reset_mode &&
+                      subscription.traffic_reset_mode !== 'NO_RESET' && (
+                        <div className="mb-2 text-[10px] text-dark-400">
+                          {t(`subscription.trafficReset.${subscription.traffic_reset_mode}`)}
+                        </div>
+                      )}
+                    <TrafficProgressBar
+                      usedGb={usedGb}
+                      limitGb={subscription.traffic_limit_gb}
+                      percent={usedPercent}
+                      isUnlimited={isUnlimited}
+                      compact
+                    />
+                  </>
+                )}
               </div>
 
               {/* ─── Connect Device Button ─── */}
@@ -1248,7 +1267,7 @@ export default function Subscription() {
                    Sibling of the autopay toggle above, guarded ONLY by
                    is_trial + uiState — daily-tariff subscriptions must see
                    this block too (backend supports a day-interval charge). */}
-              {!subscription.is_trial && sbpUiStateValue !== 'hidden' && (
+              {!category && !subscription.is_trial && sbpUiStateValue !== 'hidden' && (
                 <div
                   className="mt-3 rounded-[14px] p-3.5"
                   style={{
@@ -1364,7 +1383,7 @@ export default function Subscription() {
                    Независимый от Platega движок: сиблинг того же тоггла, те же
                    состояния. Период задан продуктом в кабинете Lava и приезжает
                    числом дней, поэтому подпись строится из charge_days. */}
-              {!subscription.is_trial && lavaUiStateValue !== 'hidden' && (
+              {!category && !subscription.is_trial && lavaUiStateValue !== 'hidden' && (
                 <div
                   className="mt-3 rounded-[14px] p-3.5"
                   style={{
@@ -1701,7 +1720,7 @@ export default function Subscription() {
       {subscription &&
         (subscription.is_active || subscription.is_limited) &&
         !subscription.is_trial &&
-        subscription.device_limit !== 0 && (
+        (subscription.device_limit !== 0 || canBuyTraffic(subscription)) && (
           <div
             className="relative overflow-hidden rounded-3xl"
             style={{
@@ -1715,35 +1734,39 @@ export default function Subscription() {
               {t('subscription.additionalOptions.title')}
             </h2>
 
-            {/* Buy Devices */}
-            <DeviceTopupSheet
-              open={showDeviceTopup}
-              onOpen={() => setShowDeviceTopup(true)}
-              onClose={() => setShowDeviceTopup(false)}
-              subscription={subscription}
-              subscriptionId={subscriptionId}
-              devicesToAdd={devicesToAdd}
-              onDevicesToAddChange={setDevicesToAdd}
-              purchaseOptions={purchaseOptions}
-              isDark={isDark}
-            />
+            {subscription.device_limit !== 0 && (
+              <>
+                {/* Buy Devices */}
+                <DeviceTopupSheet
+                  open={showDeviceTopup}
+                  onOpen={() => setShowDeviceTopup(true)}
+                  onClose={() => setShowDeviceTopup(false)}
+                  subscription={subscription}
+                  subscriptionId={subscriptionId}
+                  devicesToAdd={devicesToAdd}
+                  onDevicesToAddChange={setDevicesToAdd}
+                  purchaseOptions={purchaseOptions}
+                  isDark={isDark}
+                />
 
-            {/* Reduce Devices */}
-            <div className="mt-4">
-              <DeviceReductionSheet
-                open={showDeviceReduction}
-                onOpen={() => setShowDeviceReduction(true)}
-                onClose={() => setShowDeviceReduction(false)}
-                subscriptionPresent={!!subscription}
-                subscriptionId={subscriptionId}
-                targetDeviceLimit={targetDeviceLimit}
-                onTargetDeviceLimitChange={setTargetDeviceLimit}
-                isDark={isDark}
-              />
-            </div>
+                {/* Reduce Devices */}
+                <div className="mt-4">
+                  <DeviceReductionSheet
+                    open={showDeviceReduction}
+                    onOpen={() => setShowDeviceReduction(true)}
+                    onClose={() => setShowDeviceReduction(false)}
+                    subscriptionPresent={!!subscription}
+                    subscriptionId={subscriptionId}
+                    targetDeviceLimit={targetDeviceLimit}
+                    onTargetDeviceLimitChange={setTargetDeviceLimit}
+                    isDark={isDark}
+                  />
+                </div>
+              </>
+            )}
 
             {/* Buy Traffic */}
-            {subscription.traffic_limit_gb > 0 && (
+            {canBuyTraffic(subscription) && (
               <div className="mt-4">
                 <TrafficTopupSheet
                   open={showTrafficTopup}

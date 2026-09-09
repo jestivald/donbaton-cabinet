@@ -13,6 +13,8 @@ import { getMonthlyPriceKopeks } from '../../../utils/pricing';
 import InsufficientBalancePrompt from '../../InsufficientBalancePrompt';
 import type { Tariff, TariffPeriod } from '../../../types';
 import { BestValueBadge } from '../BestValueBadge';
+import { TariffNetworkDetails } from '../TariffNetworkDetails';
+import { networkCategory } from '../networkCategory';
 
 // ──────────────────────────────────────────────────────────────────
 // TariffPurchaseForm
@@ -56,6 +58,9 @@ export function TariffPurchaseForm({
   const queryClient = useQueryClient();
   const { formatAmount, currencySymbol } = useCurrency();
   const { applyPromoDiscount } = usePromoDiscount();
+  const customTrafficEnabled =
+    tariff.custom_traffic_enabled && !networkCategory(tariff.network_category);
+  const customDaysEnabled = tariff.custom_days_enabled && !networkCategory(tariff.network_category);
   // Та же котировка, что на карточке тарифа: серверная цена + промокод один раз.
   const dailyQuote = dailyPriceQuote(tariff, applyPromoDiscount);
   const { openLink, platform } = usePlatform();
@@ -85,8 +90,7 @@ export function TariffPurchaseForm({
         : useCustomDays
           ? customDays
           : selectedTariffPeriod?.days || 30;
-      const trafficGb =
-        useCustomTraffic && tariff.custom_traffic_enabled ? customTrafficGb : undefined;
+      const trafficGb = useCustomTraffic && customTrafficEnabled ? customTrafficGb : undefined;
       // Forward the subscription_id when the user landed here via the
       // "Renew this subscription" flow (?subscriptionId=N). The backend
       // uses it to resolve the exact target row by ID, avoiding the
@@ -123,7 +127,7 @@ export function TariffPurchaseForm({
     },
   });
 
-  const sbpPurchaseButton = sbpPurchaseEnabled && (
+  const sbpPurchaseButton = sbpPurchaseEnabled && !networkCategory(tariff.network_category) && (
     <>
       <button
         onClick={() => sbpPurchaseMutation.mutate()}
@@ -164,7 +168,7 @@ export function TariffPurchaseForm({
     },
   });
 
-  const lavaPurchaseButton = lavaPurchaseEnabled && (
+  const lavaPurchaseButton = lavaPurchaseEnabled && !networkCategory(tariff.network_category) && (
     <>
       <button
         onClick={() => lavaPurchaseMutation.mutate()}
@@ -215,7 +219,9 @@ export function TariffPurchaseForm({
         <div className="flex flex-wrap gap-4 text-sm">
           <div>
             <span className="text-dark-500">{t('subscription.traffic')}:</span>
-            <span className="ml-2 text-dark-200">{tariff.traffic_limit_label}</span>
+            <span className="ml-2 inline-block align-top text-dark-200">
+              <TariffNetworkDetails tariff={tariff} />
+            </span>
           </div>
           <div>
             <span className="text-dark-500">{t('subscription.devices')}:</span>
@@ -400,7 +406,7 @@ export function TariffPurchaseForm({
             {/* No periods available fallback */}
             {tariff.periods.length === 0 &&
               !useCustomDays &&
-              !(tariff.custom_days_enabled && (tariff.price_per_day_kopeks ?? 0) > 0) && (
+              !(customDaysEnabled && (tariff.price_per_day_kopeks ?? 0) > 0) && (
                 <div className="rounded-xl border border-warning-500/30 bg-warning-500/10 p-4 text-center">
                   <div className="mb-2 text-sm font-medium text-warning-400">
                     {t('subscription.noPeriodsAvailable')}
@@ -415,7 +421,7 @@ export function TariffPurchaseForm({
               )}
 
             {/* Custom days option */}
-            {tariff.custom_days_enabled && (tariff.price_per_day_kopeks ?? 0) > 0 && (
+            {customDaysEnabled && (tariff.price_per_day_kopeks ?? 0) > 0 && (
               <div className="rounded-xl border border-dark-700/50 bg-dark-800/50 p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <span className="font-medium text-dark-200">
@@ -514,7 +520,7 @@ export function TariffPurchaseForm({
           </div>
 
           {/* Custom traffic option */}
-          {tariff.custom_traffic_enabled && (tariff.traffic_price_per_gb_kopeks ?? 0) > 0 && (
+          {customTrafficEnabled && (tariff.traffic_price_per_gb_kopeks ?? 0) > 0 && (
             <div>
               <div className="mb-3 text-sm text-dark-400">
                 {t('subscription.customTraffic.label')}
@@ -616,7 +622,7 @@ export function TariffPurchaseForm({
                 const promoPeriod = applyPromoDiscount(basePeriodPrice, existingPeriodOriginal);
 
                 const trafficPrice =
-                  useCustomTraffic && tariff.custom_traffic_enabled
+                  useCustomTraffic && customTrafficEnabled
                     ? customTrafficGb * (tariff.traffic_price_per_gb_kopeks ?? 0)
                     : 0;
 
@@ -691,7 +697,7 @@ export function TariffPurchaseForm({
                           </>
                         )
                       )}
-                      {useCustomTraffic && tariff.custom_traffic_enabled && (
+                      {useCustomTraffic && customTrafficEnabled && (
                         <div className="flex justify-between text-sm text-dark-300">
                           <span>{t('subscription.summary.traffic', { gb: customTrafficGb })}</span>
                           <span>+{formatPrice(trafficPrice)}</span>

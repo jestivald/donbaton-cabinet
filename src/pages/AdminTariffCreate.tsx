@@ -14,6 +14,8 @@ import {
 import { AdminBackButton } from '../components/admin';
 import { createNumberInputHandler, toNumber } from '../utils/inputHelpers';
 import Twemoji from 'react-twemoji';
+import type { NetworkCategory } from '../types';
+import { getErrorMessage } from '../utils/subscriptionHelpers';
 import { PageSkeleton, Skeleton } from '@/components/ui/skeleton';
 import {
   CalendarIcon,
@@ -43,6 +45,9 @@ export default function AdminTariffCreate() {
   const [description, setDescription] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [trafficLimitGb, setTrafficLimitGb] = useState<number | ''>(100);
+  const [networkCategory, setNetworkCategory] = useState<NetworkCategory | null>(null);
+  const [lteTrafficLimitGb, setLteTrafficLimitGb] = useState<number | ''>('');
+  const [subscriptionsCount, setSubscriptionsCount] = useState(0);
   const [deviceLimit, setDeviceLimit] = useState<number | ''>(1);
   const [devicePriceKopeks, setDevicePriceKopeks] = useState<number | ''>(0);
   const [maxDeviceLimit, setMaxDeviceLimit] = useState<number | ''>(0);
@@ -119,6 +124,9 @@ export default function AdminTariffCreate() {
       setDescription(data.description || '');
       setIsActive(data.is_active ?? true);
       setTrafficLimitGb(data.traffic_limit_gb ?? 100);
+      setNetworkCategory(data.network_category ?? null);
+      setLteTrafficLimitGb(data.lte_traffic_limit_gb ?? '');
+      setSubscriptionsCount(data.subscriptions_count ?? 0);
       setDeviceLimit(data.device_limit || 1);
       setDevicePriceKopeks(data.device_price_kopeks || 0);
       setMaxDeviceLimit(data.max_device_limit || 0);
@@ -171,9 +179,13 @@ export default function AdminTariffCreate() {
       name,
       description: isEdit ? description : description || undefined,
       is_active: isActive,
-      show_in_gift: showInGift,
+      show_in_gift: networkCategory ? false : showInGift,
       is_highlighted: isTariffHighlighted,
-      traffic_limit_gb: toNumber(trafficLimitGb, 100),
+      traffic_limit_gb: networkCategory ? 0 : toNumber(trafficLimitGb, 100),
+      network_category: networkCategory,
+      lte_traffic_limit_gb: networkCategory === 'wifi_lte' ? toNumber(lteTrafficLimitGb) : null,
+      lte_period_days: networkCategory === 'wifi_lte' ? 30 : null,
+      ...(networkCategory && { custom_days_enabled: false, custom_traffic_enabled: false }),
       device_limit: toNumber(deviceLimit, 1),
       device_price_kopeks:
         toNumber(devicePriceKopeks) >= 0 ? toNumber(devicePriceKopeks) : undefined,
@@ -185,14 +197,14 @@ export default function AdminTariffCreate() {
       allowed_squads: selectedSquads,
       external_squad_uuid: selectedExternalSquad || null,
       promo_group_ids: selectedPromoGroups,
-      traffic_topup_enabled: trafficTopupEnabled,
-      traffic_topup_packages: trafficTopupPackages,
+      traffic_topup_enabled: networkCategory === 'wifi' ? false : trafficTopupEnabled,
+      traffic_topup_packages: networkCategory === 'wifi' ? {} : trafficTopupPackages,
       max_topup_traffic_gb: toNumber(maxTopupTrafficGb),
       is_daily: isDaily,
       daily_price_kopeks: isDaily ? toNumber(dailyPriceKopeks) : 0,
       // Пустая строка отвязывает тариф от продукта Lava
-      lava_product_id: lavaProductId.trim(),
-      traffic_reset_mode: trafficResetMode,
+      lava_product_id: networkCategory ? '' : lavaProductId.trim(),
+      traffic_reset_mode: networkCategory ? 'NO_RESET' : trafficResetMode,
     };
 
     if (isEdit) {
@@ -253,7 +265,16 @@ export default function AdminTariffCreate() {
   const isDeviceLimitValid = deviceLimit !== '' && toNumber(deviceLimit) >= 1;
   const isTierLevelValid =
     tierLevel !== '' && toNumber(tierLevel) >= 1 && toNumber(tierLevel) <= 10;
-  const hasTrafficPackages = !trafficTopupEnabled || Object.keys(trafficTopupPackages).length > 0;
+  const hasTrafficPackages =
+    networkCategory === 'wifi' ||
+    !trafficTopupEnabled ||
+    Object.keys(trafficTopupPackages).length > 0;
+  const isLteQuotaValid =
+    networkCategory !== 'wifi_lte' ||
+    (lteTrafficLimitGb !== '' &&
+      Number.isInteger(lteTrafficLimitGb) &&
+      lteTrafficLimitGb > 0 &&
+      lteTrafficLimitGb <= 100000);
   const isValidPeriod =
     isNameValid &&
     isDeviceLimitValid &&
@@ -267,7 +288,12 @@ export default function AdminTariffCreate() {
     toNumber(dailyPriceKopeks) > 0 &&
     hasTrafficPackages;
   const isValid =
-    tariffType === 'period' ? isValidPeriod : tariffType === 'daily' ? isValidDaily : false;
+    isLteQuotaValid &&
+    (tariffType === 'period'
+      ? isValidPeriod
+      : tariffType === 'daily'
+        ? isValidDaily && !networkCategory
+        : false);
 
   // Collect validation errors for display
   const validationErrors: string[] = [];
@@ -286,9 +312,14 @@ export default function AdminTariffCreate() {
   if (tariffType === 'daily' && toNumber(dailyPriceKopeks) === 0) {
     validationErrors.push('dailyPriceRequired');
   }
-  if (trafficTopupEnabled && Object.keys(trafficTopupPackages).length === 0) {
+  if (
+    networkCategory !== 'wifi' &&
+    trafficTopupEnabled &&
+    Object.keys(trafficTopupPackages).length === 0
+  ) {
     validationErrors.push('trafficPackagesRequired');
   }
+  if (!isLteQuotaValid) validationErrors.push('lteQuotaRequired');
 
   // Loading state
   if (isEdit && isLoadingTariff) {
@@ -487,23 +518,76 @@ export default function AdminTariffCreate() {
           )}
 
           {/* Lava recurrent product */}
-          <div>
-            <label
-              htmlFor="tariff-lava-product"
-              className="mb-2 block text-sm font-medium text-dark-300"
-            >
-              {t('admin.tariffs.lavaProductLabel')}
-            </label>
-            <input
-              id="tariff-lava-product"
-              type="text"
-              value={lavaProductId}
-              onChange={(e) => setLavaProductId(e.target.value)}
-              className="input w-full"
-              placeholder="6be21df9-0bcd-44ac-9c2c-3be7bc94decc"
-            />
-            <p className="mt-2 text-xs text-dark-500">{t('admin.tariffs.lavaProductDesc')}</p>
-          </div>
+          {!networkCategory && (
+            <div>
+              <label
+                htmlFor="tariff-lava-product"
+                className="mb-2 block text-sm font-medium text-dark-300"
+              >
+                {t('admin.tariffs.lavaProductLabel')}
+              </label>
+              <input
+                id="tariff-lava-product"
+                type="text"
+                value={lavaProductId}
+                onChange={(e) => setLavaProductId(e.target.value)}
+                className="input w-full"
+                placeholder="6be21df9-0bcd-44ac-9c2c-3be7bc94decc"
+              />
+              <p className="mt-2 text-xs text-dark-500">{t('admin.tariffs.lavaProductDesc')}</p>
+            </div>
+          )}
+
+          {!isDaily && (
+            <div className="space-y-3 rounded-lg bg-dark-800/50 p-4">
+              <label
+                htmlFor="tariff-network-category"
+                className="block text-sm font-medium text-dark-300"
+              >
+                {t('admin.tariffs.networkCategory')}
+              </label>
+              <select
+                id="tariff-network-category"
+                className="input disabled:opacity-60"
+                value={networkCategory ?? ''}
+                disabled={isEdit && subscriptionsCount > 0}
+                onChange={(event) => {
+                  const category = (event.target.value || null) as NetworkCategory | null;
+                  setNetworkCategory(category);
+                  if (category) setTrafficLimitGb(0);
+                  if (category === 'wifi') setTrafficTopupEnabled(false);
+                }}
+              >
+                <option value="">{t('admin.tariffs.networkLegacy')}</option>
+                <option value="wifi">{t('subscription.network.wifi')}</option>
+                <option value="wifi_lte">{t('subscription.network.wifi_lte')}</option>
+              </select>
+              {isEdit && subscriptionsCount > 0 && (
+                <p className="text-xs text-dark-400">{t('admin.tariffs.networkCategoryLocked')}</p>
+              )}
+              {networkCategory && (
+                <p className="text-xs text-dark-400">{t('admin.tariffs.networkManagedHint')}</p>
+              )}
+              {networkCategory === 'wifi_lte' && (
+                <div>
+                  <label htmlFor="tariff-lte-limit" className="mb-2 block text-sm text-dark-300">
+                    {t('admin.tariffs.lteIncludedGb')}
+                  </label>
+                  <input
+                    id="tariff-lte-limit"
+                    type="number"
+                    min={1}
+                    max={100000}
+                    step={1}
+                    className="input w-32"
+                    value={lteTrafficLimitGb}
+                    onChange={createNumberInputHandler(setLteTrafficLimitGb, 1, 100000)}
+                  />
+                  <p className="mt-2 text-xs text-dark-400">{t('admin.tariffs.ltePeriodHint')}</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Traffic Limit */}
           <div>
@@ -517,7 +601,8 @@ export default function AdminTariffCreate() {
               <input
                 id="tariff-traffic-limit"
                 type="number"
-                value={trafficLimitGb}
+                value={networkCategory ? 0 : trafficLimitGb}
+                disabled={!!networkCategory}
                 onChange={createNumberInputHandler(setTrafficLimitGb, 0)}
                 className="input w-32"
                 min={0}
@@ -871,220 +956,232 @@ export default function AdminTariffCreate() {
           </div>
 
           {/* Traffic topup */}
-          <div className="card space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium text-dark-200">
-                {t('admin.tariffs.extraTrafficTitle')}
-              </h4>
-              <button
-                type="button"
-                onClick={() => setTrafficTopupEnabled(!trafficTopupEnabled)}
-                role="switch"
-                aria-checked={trafficTopupEnabled}
-                aria-label={t('admin.tariffs.extraTrafficTitle')}
-                className={`relative h-6 w-11 rounded-full transition-colors ${
-                  trafficTopupEnabled ? 'bg-accent-500' : 'bg-dark-600'
-                }`}
-              >
-                <span
-                  className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${
-                    trafficTopupEnabled ? 'left-6' : 'left-1'
-                  }`}
-                />
-              </button>
-            </div>
-            {trafficTopupEnabled && (
-              <>
-                <div className="flex items-center gap-3">
-                  <span className="w-32 text-sm text-dark-400">
-                    {t('admin.tariffs.trafficMaxLimitLabel')}
-                  </span>
-                  <input
-                    type="number"
-                    value={maxTopupTrafficGb}
-                    onChange={createNumberInputHandler(setMaxTopupTrafficGb, 0)}
-                    className="input w-24"
-                    min={0}
-                    placeholder="0"
-                  />
-                  <span className="text-dark-400">{t('admin.tariffs.gbUnit')}</span>
-                </div>
-                {/* Add new package */}
-                <div className="rounded-lg border border-dashed border-dark-600 bg-dark-800/50 p-3">
-                  <h5 className="mb-2 text-xs font-medium text-dark-400">
-                    {t('admin.tariffs.addPackageTitle')}
-                  </h5>
-                  <div className="flex flex-wrap items-end gap-2">
-                    <div>
-                      <label className="mb-1 block text-xs text-dark-500">
-                        {t('admin.tariffs.gbUnit')}
-                      </label>
-                      <input
-                        type="number"
-                        value={newPackageGb}
-                        onChange={createNumberInputHandler(setNewPackageGb, 1)}
-                        className="input w-20"
-                        placeholder="10"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs text-dark-500">
-                        {t('admin.tariffs.priceLabel')}
-                      </label>
-                      <input
-                        type="number"
-                        value={newPackagePrice}
-                        onChange={createNumberInputHandler(setNewPackagePrice, 1)}
-                        className="input w-24"
-                        placeholder="100"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const gb = toNumber(newPackageGb, 0);
-                        const price = toNumber(newPackagePrice, 0);
-                        if (gb > 0 && price >= 0 && !trafficTopupPackages[String(gb)]) {
-                          setTrafficTopupPackages((prev) => ({
-                            ...prev,
-                            [String(gb)]: price * 100,
-                          }));
-                          setNewPackageGb(10);
-                          setNewPackagePrice(100);
-                        }
-                      }}
-                      disabled={
-                        newPackageGb === '' ||
-                        newPackagePrice === '' ||
-                        !!trafficTopupPackages[String(newPackageGb)]
-                      }
-                      className="btn-primary flex items-center gap-1 px-3 py-2 text-sm"
-                    >
-                      <PlusIcon />
-                      {t('admin.tariffs.addButton')}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Package list */}
-                <div>
-                  <span className="text-sm text-dark-400">
-                    {t('admin.tariffs.trafficPackagesLabel')}
-                  </span>
-                  {Object.keys(trafficTopupPackages).length === 0 ? (
-                    <div className="mt-2 py-4 text-center text-sm text-dark-500">
-                      {t('admin.tariffs.noPackagesHint')}
-                    </div>
-                  ) : (
-                    <div className="mt-2 space-y-2">
-                      {Object.entries(trafficTopupPackages)
-                        .sort(([a], [b]) => Number(a) - Number(b))
-                        .map(([gb, priceKopeks]) => (
-                          <div
-                            key={gb}
-                            className="flex items-center gap-2 rounded-lg bg-dark-800 p-2"
-                          >
-                            <span className="w-16 text-sm font-medium text-dark-300">
-                              {gb} {t('admin.tariffs.gbPackageUnit')}
-                            </span>
-                            <input
-                              type="number"
-                              value={
-                                editingPackagePrices[gb] !== undefined
-                                  ? editingPackagePrices[gb]
-                                  : priceKopeks / 100
-                              }
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setEditingPackagePrices((prev) => ({ ...prev, [gb]: val }));
-                                if (val !== '') {
-                                  const num = parseFloat(val);
-                                  if (!Number.isNaN(num)) {
-                                    setTrafficTopupPackages((prev) => ({
-                                      ...prev,
-                                      [gb]: Math.max(0, num) * 100,
-                                    }));
-                                  }
-                                }
-                              }}
-                              onBlur={(e) => {
-                                const val = e.target.value;
-                                if (val === '') {
-                                  setTrafficTopupPackages((prev) => ({
-                                    ...prev,
-                                    [gb]: 0,
-                                  }));
-                                }
-                                setEditingPackagePrices((prev) => {
-                                  const copy = { ...prev };
-                                  delete copy[gb];
-                                  return copy;
-                                });
-                              }}
-                              className="input w-24"
-                              step={1}
-                              placeholder="0"
-                            />
-                            <span className="text-xs text-dark-400">₽</span>
-                            <div className="flex-1" />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setTrafficTopupPackages((prev) => {
-                                  const copy = { ...prev };
-                                  delete copy[gb];
-                                  return copy;
-                                });
-                              }}
-                              className="rounded-lg p-2 text-dark-400 transition-colors hover:bg-error-500/20 hover:text-error-400"
-                            >
-                              <TrashIcon className="h-4 w-4" />
-                            </button>
-                          </div>
-                        ))}
-                    </div>
+          {networkCategory !== 'wifi' && (
+            <div className="card space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium text-dark-200">
+                  {t(
+                    networkCategory === 'wifi_lte'
+                      ? 'subscription.network.buyLte'
+                      : 'admin.tariffs.extraTrafficTitle',
                   )}
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Traffic reset mode */}
-          <div className="card space-y-3">
-            <h4 className="text-sm font-medium text-dark-200">
-              {t('admin.tariffs.trafficResetModeTitle')}
-            </h4>
-            <p className="text-xs text-dark-500">{t('admin.tariffs.trafficResetModeDesc')}</p>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { value: null, labelKey: 'admin.tariffs.resetModeGlobal', emoji: '🌐' },
-                { value: 'DAY', labelKey: 'admin.tariffs.resetModeDaily', emoji: '📅' },
-                { value: 'WEEK', labelKey: 'admin.tariffs.resetModeWeekly', emoji: '📆' },
-                { value: 'MONTH', labelKey: 'admin.tariffs.resetModeMonthly', emoji: '🗓️' },
-                {
-                  value: 'MONTH_ROLLING',
-                  labelKey: 'admin.tariffs.resetModeMonthRolling',
-                  emoji: '🔄',
-                },
-                { value: 'NO_RESET', labelKey: 'admin.tariffs.resetModeNever', emoji: '🚫' },
-              ].map((option) => (
+                </h4>
                 <button
-                  key={option.value || 'global'}
                   type="button"
-                  onClick={() => setTrafficResetMode(option.value)}
-                  className={`rounded-lg p-3 text-left text-sm transition-colors ${
-                    trafficResetMode === option.value
-                      ? isDaily
-                        ? 'bg-warning-500/20 text-warning-300 ring-1 ring-warning-500/30'
-                        : 'bg-accent-500/20 text-accent-300 ring-1 ring-accent-500/30'
-                      : 'bg-dark-800 text-dark-300 hover:bg-dark-700'
+                  onClick={() => setTrafficTopupEnabled(!trafficTopupEnabled)}
+                  role="switch"
+                  aria-checked={trafficTopupEnabled}
+                  aria-label={t(
+                    networkCategory === 'wifi_lte'
+                      ? 'subscription.network.buyLte'
+                      : 'admin.tariffs.extraTrafficTitle',
+                  )}
+                  className={`relative h-6 w-11 rounded-full transition-colors ${
+                    trafficTopupEnabled ? 'bg-accent-500' : 'bg-dark-600'
                   }`}
                 >
-                  {option.emoji} {t(option.labelKey)}
+                  <span
+                    className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${
+                      trafficTopupEnabled ? 'left-6' : 'left-1'
+                    }`}
+                  />
                 </button>
-              ))}
+              </div>
+              {trafficTopupEnabled && (
+                <>
+                  <div className="flex items-center gap-3">
+                    <span className="w-32 text-sm text-dark-400">
+                      {t('admin.tariffs.trafficMaxLimitLabel')}
+                    </span>
+                    <input
+                      type="number"
+                      value={maxTopupTrafficGb}
+                      onChange={createNumberInputHandler(setMaxTopupTrafficGb, 0)}
+                      className="input w-24"
+                      min={0}
+                      placeholder="0"
+                    />
+                    <span className="text-dark-400">{t('admin.tariffs.gbUnit')}</span>
+                  </div>
+                  {/* Add new package */}
+                  <div className="rounded-lg border border-dashed border-dark-600 bg-dark-800/50 p-3">
+                    <h5 className="mb-2 text-xs font-medium text-dark-400">
+                      {t('admin.tariffs.addPackageTitle')}
+                    </h5>
+                    <div className="flex flex-wrap items-end gap-2">
+                      <div>
+                        <label className="mb-1 block text-xs text-dark-500">
+                          {t('admin.tariffs.gbUnit')}
+                        </label>
+                        <input
+                          type="number"
+                          value={newPackageGb}
+                          onChange={createNumberInputHandler(setNewPackageGb, 1)}
+                          className="input w-20"
+                          placeholder="10"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-dark-500">
+                          {t('admin.tariffs.priceLabel')}
+                        </label>
+                        <input
+                          type="number"
+                          value={newPackagePrice}
+                          onChange={createNumberInputHandler(setNewPackagePrice, 1)}
+                          className="input w-24"
+                          placeholder="100"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const gb = toNumber(newPackageGb, 0);
+                          const price = toNumber(newPackagePrice, 0);
+                          if (gb > 0 && price >= 0 && !trafficTopupPackages[String(gb)]) {
+                            setTrafficTopupPackages((prev) => ({
+                              ...prev,
+                              [String(gb)]: price * 100,
+                            }));
+                            setNewPackageGb(10);
+                            setNewPackagePrice(100);
+                          }
+                        }}
+                        disabled={
+                          newPackageGb === '' ||
+                          newPackagePrice === '' ||
+                          !!trafficTopupPackages[String(newPackageGb)]
+                        }
+                        className="btn-primary flex items-center gap-1 px-3 py-2 text-sm"
+                      >
+                        <PlusIcon />
+                        {t('admin.tariffs.addButton')}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Package list */}
+                  <div>
+                    <span className="text-sm text-dark-400">
+                      {t('admin.tariffs.trafficPackagesLabel')}
+                    </span>
+                    {Object.keys(trafficTopupPackages).length === 0 ? (
+                      <div className="mt-2 py-4 text-center text-sm text-dark-500">
+                        {t('admin.tariffs.noPackagesHint')}
+                      </div>
+                    ) : (
+                      <div className="mt-2 space-y-2">
+                        {Object.entries(trafficTopupPackages)
+                          .sort(([a], [b]) => Number(a) - Number(b))
+                          .map(([gb, priceKopeks]) => (
+                            <div
+                              key={gb}
+                              className="flex items-center gap-2 rounded-lg bg-dark-800 p-2"
+                            >
+                              <span className="w-16 text-sm font-medium text-dark-300">
+                                {gb} {t('admin.tariffs.gbPackageUnit')}
+                              </span>
+                              <input
+                                type="number"
+                                value={
+                                  editingPackagePrices[gb] !== undefined
+                                    ? editingPackagePrices[gb]
+                                    : priceKopeks / 100
+                                }
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setEditingPackagePrices((prev) => ({ ...prev, [gb]: val }));
+                                  if (val !== '') {
+                                    const num = parseFloat(val);
+                                    if (!Number.isNaN(num)) {
+                                      setTrafficTopupPackages((prev) => ({
+                                        ...prev,
+                                        [gb]: Math.max(0, num) * 100,
+                                      }));
+                                    }
+                                  }
+                                }}
+                                onBlur={(e) => {
+                                  const val = e.target.value;
+                                  if (val === '') {
+                                    setTrafficTopupPackages((prev) => ({
+                                      ...prev,
+                                      [gb]: 0,
+                                    }));
+                                  }
+                                  setEditingPackagePrices((prev) => {
+                                    const copy = { ...prev };
+                                    delete copy[gb];
+                                    return copy;
+                                  });
+                                }}
+                                className="input w-24"
+                                step={1}
+                                placeholder="0"
+                              />
+                              <span className="text-xs text-dark-400">₽</span>
+                              <div className="flex-1" />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTrafficTopupPackages((prev) => {
+                                    const copy = { ...prev };
+                                    delete copy[gb];
+                                    return copy;
+                                  });
+                                }}
+                                className="rounded-lg p-2 text-dark-400 transition-colors hover:bg-error-500/20 hover:text-error-400"
+                              >
+                                <TrashIcon className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
-          </div>
+          )}
+
+          {/* Traffic reset mode */}
+          {!networkCategory && (
+            <div className="card space-y-3">
+              <h4 className="text-sm font-medium text-dark-200">
+                {t('admin.tariffs.trafficResetModeTitle')}
+              </h4>
+              <p className="text-xs text-dark-500">{t('admin.tariffs.trafficResetModeDesc')}</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { value: null, labelKey: 'admin.tariffs.resetModeGlobal', emoji: '🌐' },
+                  { value: 'DAY', labelKey: 'admin.tariffs.resetModeDaily', emoji: '📅' },
+                  { value: 'WEEK', labelKey: 'admin.tariffs.resetModeWeekly', emoji: '📆' },
+                  { value: 'MONTH', labelKey: 'admin.tariffs.resetModeMonthly', emoji: '🗓️' },
+                  {
+                    value: 'MONTH_ROLLING',
+                    labelKey: 'admin.tariffs.resetModeMonthRolling',
+                    emoji: '🔄',
+                  },
+                  { value: 'NO_RESET', labelKey: 'admin.tariffs.resetModeNever', emoji: '🚫' },
+                ].map((option) => (
+                  <button
+                    key={option.value || 'global'}
+                    type="button"
+                    onClick={() => setTrafficResetMode(option.value)}
+                    className={`rounded-lg p-3 text-left text-sm transition-colors ${
+                      trafficResetMode === option.value
+                        ? isDaily
+                          ? 'bg-warning-500/20 text-warning-300 ring-1 ring-warning-500/30'
+                          : 'bg-accent-500/20 text-accent-300 ring-1 ring-accent-500/30'
+                        : 'bg-dark-800 text-dark-300 hover:bg-dark-700'
+                    }`}
+                  >
+                    {option.emoji} {t(option.labelKey)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Promo Groups */}
           <div className="card space-y-4">
@@ -1186,36 +1283,43 @@ export default function AdminTariffCreate() {
               </button>
             </div>
             {/* Show in gift toggle */}
-            <div className="flex items-center justify-between rounded-lg bg-dark-800 p-3">
-              <div>
-                <span className="text-sm font-medium text-dark-200">
-                  {t('admin.tariffs.showInGiftLabel')}
-                </span>
-                <p className="text-xs text-dark-500">{t('admin.tariffs.showInGiftHint')}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowInGift(!showInGift)}
-                role="switch"
-                aria-checked={showInGift}
-                aria-label={t('admin.tariffs.showInGiftLabel')}
-                className={`relative h-6 w-11 rounded-full transition-colors ${
-                  showInGift ? 'bg-accent-500' : 'bg-dark-600'
-                }`}
-              >
-                <span
-                  className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${
-                    showInGift ? 'left-6' : 'left-1'
+            {!networkCategory && (
+              <div className="flex items-center justify-between rounded-lg bg-dark-800 p-3">
+                <div>
+                  <span className="text-sm font-medium text-dark-200">
+                    {t('admin.tariffs.showInGiftLabel')}
+                  </span>
+                  <p className="text-xs text-dark-500">{t('admin.tariffs.showInGiftHint')}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowInGift(!showInGift)}
+                  role="switch"
+                  aria-checked={showInGift}
+                  aria-label={t('admin.tariffs.showInGiftLabel')}
+                  className={`relative h-6 w-11 rounded-full transition-colors ${
+                    showInGift ? 'bg-accent-500' : 'bg-dark-600'
                   }`}
-                />
-              </button>
-            </div>
+                >
+                  <span
+                    className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${
+                      showInGift ? 'left-6' : 'left-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {/* Footer */}
       <div className="card space-y-3">
+        {(createMutation.isError || updateMutation.isError) && (
+          <p role="alert" className="text-sm text-error-400">
+            {getErrorMessage(createMutation.error || updateMutation.error)}
+          </p>
+        )}
         {validationErrors.length > 0 && (
           <div className="rounded-lg border border-error-500/30 bg-error-500/10 p-3">
             <p className="mb-1 text-sm font-medium text-error-400">
