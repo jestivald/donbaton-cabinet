@@ -81,6 +81,20 @@ export function TariffPurchaseForm({
   const [useCustomDays, setUseCustomDays] = useState(false);
   const [useCustomTraffic, setUseCustomTraffic] = useState(false);
 
+  // Пакет LTE выдаётся не на весь оплаченный срок, а раз в свой цикл (у наших
+  // тарифов — 30 дней). На периодах длиннее цикла «60 ГиБ» в шапке читается как
+  // «60 ГиБ на год», поэтому под выбором периода поясняем, сколько раз пакет
+  // обновится. Цикл берём у тарифа: панель шлёт его в lte_period_days.
+  const lteCycleDays =
+    tariff.lte_period_days && tariff.lte_period_days > 0 ? tariff.lte_period_days : 30;
+  const lteRenewals = useCustomDays
+    ? 0
+    : Math.floor((selectedTariffPeriod?.days ?? 0) / lteCycleDays);
+  const showLteRenewalNote =
+    networkCategory(tariff.network_category) === 'wifi_lte' &&
+    tariff.lte_traffic_limit_gb != null &&
+    lteRenewals > 1;
+
   const purchaseMutation = useMutation({
     mutationFn: () => {
       const isDailyTariff =
@@ -401,6 +415,16 @@ export function TariffPurchaseForm({
                   );
                 })}
               </div>
+            )}
+
+            {showLteRenewalNote && (
+              <p className="mb-4 text-xs text-accent-400">
+                {t('subscription.network.lteRenewalNote', {
+                  gb: tariff.lte_traffic_limit_gb,
+                  days: lteCycleDays,
+                  count: lteRenewals,
+                })}
+              </p>
             )}
 
             {/* No periods available fallback */}

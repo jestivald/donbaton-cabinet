@@ -6,6 +6,7 @@ import { subscriptionApi } from '../api/subscription';
 import { useTheme } from '../hooks/useTheme';
 import { getGlassColors } from '../utils/glassTheme';
 import { getMonthlyPriceKopeks } from '../utils/pricing';
+import { formatPeriodLabel } from '../utils/periodLabel';
 import { useCurrency } from '../hooks/useCurrency';
 import { useHaptic } from '../platform';
 import InsufficientBalancePrompt from '../components/InsufficientBalancePrompt';
@@ -182,7 +183,7 @@ export default function RenewSubscription() {
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="text-base font-semibold" style={{ color: g.text }}>
-                      {option.period_days} {t('subscription.days', 'дней')}
+                      {formatPeriodLabel(option.period_days, t)}
                     </span>
                     {option.discount_percent > 0 && (
                       <span className="ml-2 rounded-full bg-success-400/15 px-2 py-0.5 text-[10px] font-semibold text-success-400">

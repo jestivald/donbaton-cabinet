@@ -912,48 +912,50 @@ export default function AdminTariffCreate() {
       {activeTab === 'extra' && (
         <div className="space-y-4">
           {/* Device addon */}
-          <div className="card space-y-3">
-            <h4 className="text-sm font-medium text-dark-200">
-              {t('admin.tariffs.extraDeviceTitle')}
-            </h4>
-            <div className="flex items-center gap-3">
-              <span className="w-48 text-sm text-dark-400">
-                {t('admin.tariffs.devicePriceLabel')}
-              </span>
-              <input
-                type="number"
-                value={devicePriceKopeks === '' ? '' : devicePriceKopeks / 100}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === '') {
-                    setDevicePriceKopeks('');
-                  } else {
-                    setDevicePriceKopeks(Math.max(0, parseFloat(val) || 0) * 100);
-                  }
-                }}
-                className="input w-24"
-                min={0}
-                step={1}
-                placeholder="0"
-              />
-              <span className="text-dark-400">₽</span>
+          {!networkCategory && (
+            <div className="card space-y-3">
+              <h4 className="text-sm font-medium text-dark-200">
+                {t('admin.tariffs.extraDeviceTitle')}
+              </h4>
+              <div className="flex items-center gap-3">
+                <span className="w-48 text-sm text-dark-400">
+                  {t('admin.tariffs.devicePriceLabel')}
+                </span>
+                <input
+                  type="number"
+                  value={devicePriceKopeks === '' ? '' : devicePriceKopeks / 100}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '') {
+                      setDevicePriceKopeks('');
+                    } else {
+                      setDevicePriceKopeks(Math.max(0, parseFloat(val) || 0) * 100);
+                    }
+                  }}
+                  className="input w-24"
+                  min={0}
+                  step={1}
+                  placeholder="0"
+                />
+                <span className="text-dark-400">₽</span>
+              </div>
+              <p className="text-xs text-dark-500">{t('admin.tariffs.devicePriceHint')}</p>
+              <div className="flex items-center gap-3">
+                <span className="w-48 text-sm text-dark-400">
+                  {t('admin.tariffs.maxDeviceLabel')}
+                </span>
+                <input
+                  type="number"
+                  value={maxDeviceLimit}
+                  onChange={createNumberInputHandler(setMaxDeviceLimit, 0)}
+                  className="input w-24"
+                  min={0}
+                  placeholder="0"
+                />
+              </div>
+              <p className="text-xs text-dark-500">{t('admin.tariffs.noLimitHint')}</p>
             </div>
-            <p className="text-xs text-dark-500">{t('admin.tariffs.devicePriceHint')}</p>
-            <div className="flex items-center gap-3">
-              <span className="w-48 text-sm text-dark-400">
-                {t('admin.tariffs.maxDeviceLabel')}
-              </span>
-              <input
-                type="number"
-                value={maxDeviceLimit}
-                onChange={createNumberInputHandler(setMaxDeviceLimit, 0)}
-                className="input w-24"
-                min={0}
-                placeholder="0"
-              />
-            </div>
-            <p className="text-xs text-dark-500">{t('admin.tariffs.noLimitHint')}</p>
-          </div>
+          )}
 
           {/* Traffic topup */}
           {networkCategory !== 'wifi' && (

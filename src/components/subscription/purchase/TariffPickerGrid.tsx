@@ -335,6 +335,13 @@ export function TariffPickerGrid({
                           <span className="font-medium text-accent-400">
                             {formatPrice(promoPeriod.price)}
                           </span>
+                          {/* У сетевых тарифов цена периодная: без срока «от 299 ₽»
+                              читается как цена за месяц любого периода. */}
+                          {networkCategory(tariff.network_category) && firstPeriod && (
+                            <span>
+                              {t('subscription.network.perPeriod', { count: firstPeriod.days })}
+                            </span>
+                          )}
                           {promoPeriod.original && promoPeriod.original > promoPeriod.price && (
                             <span className="text-xs text-dark-500 line-through">
                               {formatPrice(promoPeriod.original)}

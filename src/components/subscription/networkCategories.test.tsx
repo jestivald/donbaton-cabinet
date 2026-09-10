@@ -6,7 +6,7 @@ import { I18nextProvider } from 'react-i18next';
 import { createInstance } from 'i18next';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ru from '../../locales/ru.json';
-import type { Subscription, Tariff } from '../../types';
+import type { Subscription, Tariff, TariffPeriod } from '../../types';
 import { TariffPickerGrid, type TariffPickerGridProps } from './purchase/TariffPickerGrid';
 import { NetworkTrafficSummary } from './NetworkTrafficSummary';
 import { canBuyTraffic } from './networkCategory';
@@ -48,6 +48,21 @@ const tariff = (overrides: Partial<Tariff> & { id: number; name: string }): Tari
   ...overrides,
 });
 
+const period = (
+  days: number,
+  priceKopeks: number,
+  overrides: Partial<TariffPeriod> = {},
+): TariffPeriod => ({
+  days,
+  months: Math.round(days / 30),
+  label: `${days} дней`,
+  price_kopeks: priceKopeks,
+  price_label: `${priceKopeks / 100} ₽`,
+  price_per_month_kopeks: Math.round((priceKopeks * 30) / days),
+  price_per_month_label: '',
+  ...overrides,
+});
+
 const wifi = tariff({ id: 1, name: 'Домашний', network_category: 'wifi' });
 const lte = tariff({
   id: 2,
@@ -85,7 +100,7 @@ describe('network categories in the purchase and switch catalog', () => {
   it('defaults to Wi-Fi + LTE, isolates categories and keeps legacy plans reachable', () => {
     render(catalog());
     expect(screen.getByText('Везде')).toBeTruthy();
-    expect(screen.getByText('LTE: 37 ГБ')).toBeTruthy();
+    expect(screen.getByText('LTE: 37 ГиБ')).toBeTruthy();
     expect(screen.getByText('каждые 28 дн.')).toBeTruthy();
     expect(screen.queryByText('Домашний')).toBeNull();
     expect(screen.queryByText('Архив LTE')).toBeNull();
@@ -93,7 +108,7 @@ describe('network categories in the purchase and switch catalog', () => {
     selectTab('Только Wi-Fi');
     expect(screen.getByText('Домашний')).toBeTruthy();
     expect(screen.queryByText('Везде')).toBeNull();
-    expect(screen.queryByText('LTE: 37 ГБ')).toBeNull();
+    expect(screen.queryByText('LTE: 37 ГиБ')).toBeNull();
 
     selectTab('Другие тарифы');
     expect(screen.getByText('Архив LTE')).toBeTruthy();
@@ -336,28 +351,9 @@ describe('separate LTE allowance', () => {
   });
 });
 
-it('does not offer recurring or custom traffic/day purchase flows for managed plans', () => {
-  const client = new QueryClient();
-  const selected = tariff({
-    ...lte,
-    custom_days_enabled: true,
-    price_per_day_kopeks: 100,
-    custom_traffic_enabled: true,
-    traffic_price_per_gb_kopeks: 100,
-    periods: [
-      {
-        days: 30,
-        months: 1,
-        label: '30 дней',
-        price_kopeks: 12300,
-        price_label: '123 ₽',
-        price_per_month_kopeks: 12300,
-        price_per_month_label: '123 ₽',
-      },
-    ],
-  });
-  render(
-    <QueryClientProvider client={client}>
+function purchaseForm(selected: Tariff) {
+  return (
+    <QueryClientProvider client={new QueryClient()}>
       <I18nextProvider i18n={i18n}>
         <MemoryRouter>
           <TariffPurchaseForm
@@ -370,7 +366,22 @@ it('does not offer recurring or custom traffic/day purchase flows for managed pl
           />
         </MemoryRouter>
       </I18nextProvider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
+  );
+}
+
+it('does not offer recurring or custom traffic/day purchase flows for managed plans', () => {
+  render(
+    purchaseForm(
+      tariff({
+        ...lte,
+        custom_days_enabled: true,
+        price_per_day_kopeks: 100,
+        custom_traffic_enabled: true,
+        traffic_price_per_gb_kopeks: 100,
+        periods: [period(30, 12300)],
+      }),
+    ),
   );
   expect(
     screen.queryByRole('button', { name: ru.subscription.sbpRecurring.purchaseButton }),
@@ -379,5 +390,77 @@ it('does not offer recurring or custom traffic/day purchase flows for managed pl
     screen.queryByRole('button', { name: ru.subscription.lavaRecurring.purchaseButton }),
   ).toBeNull();
   expect(screen.queryByRole('switch')).toBeNull();
-  expect(screen.getByText('LTE: 37 ГБ')).toBeTruthy();
+  expect(screen.getByText('LTE: 37 ГиБ')).toBeTruthy();
+});
+
+/**
+ * Длинные периоды сетевых тарифов. Пакет LTE выдаётся раз в 30 дней, а не на
+ * весь оплаченный срок: без пояснения «60 ГиБ» на годовой карточке читается
+ * как «60 ГиБ на год» — ровно то обещание, которого продукт не даёт.
+ */
+const lteYear = tariff({
+  ...lte,
+  lte_traffic_limit_gb: 60,
+  lte_period_days: 30,
+  periods: [
+    period(30, 29900, { label: '1 месяц' }),
+    period(90, 79900, { label: '3 месяца' }),
+    period(180, 129900, { label: '6 месяцев', is_highlighted: true }),
+    period(360, 179900, { label: '12 месяцев' }),
+  ],
+});
+
+describe('LTE-пакет на периодах длиннее его цикла', () => {
+  it('пересчитывает обновления пакета под выбранный срок', () => {
+    render(purchaseForm(lteYear));
+    for (const label of ['1 месяц', '3 месяца', '6 месяцев', '12 месяцев']) {
+      expect(screen.getByText(label)).toBeTruthy();
+    }
+    // Шапка тарифа по-прежнему называет сам пакет и его цикл.
+    expect(screen.getByText('LTE: 60 ГиБ')).toBeTruthy();
+    expect(screen.getByText('каждые 30 дн.')).toBeTruthy();
+    // На месяце срок равен циклу — пояснять нечего.
+    expect(screen.queryByText(/обновляется каждые/)).toBeNull();
+
+    fireEvent.click(screen.getByText('12 месяцев'));
+    expect(
+      screen.getByText(
+        'LTE-пакет 60 ГиБ обновляется каждые 30 дней — 12 обновлений за срок подписки',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText(ru.subscription.total).parentElement?.textContent).toContain('1799 ₽');
+
+    fireEvent.click(screen.getByText('3 месяца'));
+    expect(screen.getByText(/— 3 обновления за срок подписки/)).toBeTruthy();
+
+    fireEvent.click(screen.getByText('1 месяц'));
+    expect(screen.queryByText(/обновляется каждые/)).toBeNull();
+    expect(screen.getByText(ru.subscription.total).parentElement?.textContent).toContain('299 ₽');
+  });
+
+  it('не обещает обновление пакета тарифу без LTE', () => {
+    render(
+      purchaseForm(tariff({ ...wifi, periods: [period(360, 179900, { label: '12 месяцев' })] })),
+    );
+    expect(screen.getByText('12 месяцев')).toBeTruthy();
+    expect(screen.queryByText(/обновляется каждые/)).toBeNull();
+  });
+});
+
+it('называет срок рядом с ценой сетевого тарифа, не трогая старые карточки', () => {
+  render(
+    catalog({
+      tariffs: [
+        { ...lteYear, id: 5 },
+        { ...legacy, periods: [period(30, 29900)] },
+      ],
+    }),
+  );
+  expect(screen.getByText(ru.subscription.from)).toBeTruthy();
+  expect(screen.getByText('299 ₽')).toBeTruthy();
+  expect(screen.getByText('/ 30 дней')).toBeTruthy();
+
+  selectTab('Другие тарифы');
+  expect(screen.getByText('299 ₽')).toBeTruthy();
+  expect(screen.queryByText('/ 30 дней')).toBeNull();
 });

@@ -97,7 +97,7 @@ describe('LTE top-up confirmation', () => {
     api.purchaseTraffic.mockRejectedValueOnce(new Error('Connection lost')).mockResolvedValue({});
     showTopup();
     fireEvent.click(await screen.findByText('7 ГБ LTE'));
-    fireEvent.click(screen.getByRole('button', { name: 'Купить 7 ГБ LTE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Купить 7 ГиБ LTE' }));
     await waitFor(() => expect(api.purchaseTraffic).toHaveBeenCalledTimes(1));
     const firstId = api.purchaseTraffic.mock.calls[0][2];
     expect(firstId).toMatch(
@@ -105,16 +105,16 @@ describe('LTE top-up confirmation', () => {
     );
     await waitFor(() =>
       expect(
-        (screen.getByRole('button', { name: 'Купить 7 ГБ LTE' }) as HTMLButtonElement).disabled,
+        (screen.getByRole('button', { name: 'Купить 7 ГиБ LTE' }) as HTMLButtonElement).disabled,
       ).toBe(false),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Купить 7 ГБ LTE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Купить 7 ГиБ LTE' }));
     await waitFor(() => expect(api.purchaseTraffic).toHaveBeenCalledTimes(2));
     expect(api.purchaseTraffic.mock.calls[1]).toEqual([7, 99, firstId, 12300]);
 
     fireEvent.click(await screen.findByRole('button', { name: /Докупить LTE-трафик/ }));
     fireEvent.click(await screen.findByText('7 ГБ LTE'));
-    fireEvent.click(screen.getByRole('button', { name: 'Купить 7 ГБ LTE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Купить 7 ГиБ LTE' }));
     await waitFor(() => expect(api.purchaseTraffic).toHaveBeenCalledTimes(3));
     expect(api.purchaseTraffic.mock.calls[2][2]).not.toBe(firstId);
   });
@@ -123,11 +123,11 @@ describe('LTE top-up confirmation', () => {
     api.purchaseTraffic.mockRejectedValue(new Error('Connection lost'));
     showTopup();
     fireEvent.click(await screen.findByText('7 ГБ LTE'));
-    fireEvent.click(screen.getByRole('button', { name: 'Купить 7 ГБ LTE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Купить 7 ГиБ LTE' }));
     await waitFor(() => expect(api.purchaseTraffic).toHaveBeenCalledTimes(1));
     await screen.findByText('Connection lost');
     fireEvent.click(screen.getByText('13 ГБ LTE'));
-    fireEvent.click(screen.getByRole('button', { name: 'Купить 13 ГБ LTE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Купить 13 ГиБ LTE' }));
     await waitFor(() => expect(api.purchaseTraffic).toHaveBeenCalledTimes(2));
     expect(api.purchaseTraffic.mock.calls[1][0]).toBe(13);
     expect(api.purchaseTraffic.mock.calls[1][2]).not.toBe(api.purchaseTraffic.mock.calls[0][2]);
@@ -137,14 +137,14 @@ describe('LTE top-up confirmation', () => {
     api.purchaseTraffic.mockRejectedValueOnce(new Error('Connection lost')).mockResolvedValue({});
     const first = showTopup();
     fireEvent.click(await screen.findByText('7 ГБ LTE'));
-    fireEvent.click(screen.getByRole('button', { name: 'Купить 7 ГБ LTE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Купить 7 ГиБ LTE' }));
     await screen.findByText('Connection lost');
     const requestId = api.purchaseTraffic.mock.calls[0][2];
     fireEvent.click(screen.getByRole('button', { name: ru.common.close }));
     first.unmount();
     resetSafeStorage();
     showTopup();
-    fireEvent.click(await screen.findByRole('button', { name: 'Купить 7 ГБ LTE' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Купить 7 ГиБ LTE' }));
     await waitFor(() => expect(api.purchaseTraffic).toHaveBeenCalledTimes(2));
     expect(api.purchaseTraffic.mock.calls[1]).toEqual([7, 99, requestId, 12300]);
   });
@@ -172,7 +172,7 @@ describe('LTE top-up confirmation', () => {
       ru.subscription.network.intentStorageUnavailable,
     );
     expect(
-      (screen.getByRole('button', { name: 'Купить 7 ГБ LTE' }) as HTMLButtonElement).disabled,
+      (screen.getByRole('button', { name: 'Купить 7 ГиБ LTE' }) as HTMLButtonElement).disabled,
     ).toBe(true);
     expect(api.purchaseTraffic).not.toHaveBeenCalled();
   });

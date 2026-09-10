@@ -29,6 +29,7 @@ import { copyToClipboard } from '../utils/clipboard';
 import { buildGiftClaimArtifacts } from '../utils/giftShare';
 import { getApiErrorMessage } from '../utils/api-error';
 import { formatPrice } from '../utils/format';
+import { formatPeriodLabel } from '../utils/periodLabel';
 import { useCurrency } from '../hooks/useCurrency';
 import { usePlatform, useHaptic } from '@/platform';
 import { openPaymentUrl } from '../utils/openPaymentUrl';
@@ -44,22 +45,6 @@ import {
   WarningCircleIcon,
   BanIcon,
 } from '@/components/icons';
-
-function formatPeriodLabel(
-  days: number,
-  t: (key: string, options?: Record<string, unknown>) => string,
-): string {
-  const key = `landing.periodLabels.d${days}`;
-  const result = t(key);
-  if (result !== key) return result;
-
-  const months = Math.floor(days / 30);
-  const remainder = days % 30;
-  if (months > 0 && remainder === 0) {
-    return t('landing.periodLabels.nMonths', { count: months });
-  }
-  return t('landing.periodLabels.nDays', { count: days });
-}
 
 function getGiftStatusKey(status: string): string {
   const statusMap: Record<string, string> = {

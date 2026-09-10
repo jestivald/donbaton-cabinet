@@ -96,9 +96,9 @@ async function renderRenew() {
   );
 }
 
-/** Карточка периода — ближайшая кнопка вокруг подписи с числом дней. */
+/** Карточка периода — ближайшая кнопка вокруг подписи срока. */
 function cardFor(days: number): HTMLElement {
-  const label = screen.getByText(new RegExp(`^${days} `));
+  const label = screen.getByText(ru(`landing.periodLabels.d${days}`));
   const card = label.closest('button');
   if (!card) throw new Error(`не нашёл карточку периода ${days}`);
   return card;
@@ -132,7 +132,7 @@ describe('выделенный период при продлении', () => {
   it('ничего не выделяет, когда оператор не выбрал период', async () => {
     state.options = [option({ period_days: 30 }), option({ period_days: 180 })];
     await renderRenew();
-    await screen.findByText(/^30 /);
+    await screen.findByText(ru('landing.periodLabels.d30'));
 
     expect(screen.queryByText(ru('subscription.bestValue'))).toBeNull();
   });
@@ -151,6 +151,34 @@ describe('выделенный период при продлении', () => {
 
     expect(await screen.findByText(ru('subscription.bestValue'))).toBeTruthy();
     expect(screen.getByText('-25%')).toBeTruthy();
+  });
+});
+
+/**
+ * Подпись срока при продлении. Была «30 дней» против «1 месяц» в форме покупки:
+ * один и тот же срок назывался на двух экранах по-разному, и «360 дней» звучало
+ * длиннее, чем «12 месяцев», за которые платят.
+ */
+describe('подпись срока при продлении', () => {
+  it('называет срок месяцами, как форма покупки', async () => {
+    state.options = [
+      option({ period_days: 30 }),
+      option({ period_days: 90, price_kopeks: 79900 }),
+      option({ period_days: 180, price_kopeks: 129900 }),
+    ];
+    await renderRenew();
+
+    expect(await screen.findByText('1 месяц')).toBeTruthy();
+    expect(screen.getByText('3 месяца')).toBeTruthy();
+    expect(screen.getByText('6 месяцев')).toBeTruthy();
+    expect(screen.queryByText(/^\d+ дней$/)).toBeNull();
+  });
+
+  it('оставляет дни сроку без месячной подписи', async () => {
+    state.options = [option({ period_days: 45, price_kopeks: 44900 })];
+    await renderRenew();
+
+    expect(await screen.findByText(/^45 дн/)).toBeTruthy();
   });
 });
 
