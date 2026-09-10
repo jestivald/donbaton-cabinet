@@ -169,9 +169,9 @@ describe('продление: выбранный по умолчанию пер�
 
   it('без отметки оператора не выбирает ничего — как было', async () => {
     state.options = [option({ period_days: 30 }), option({ period_days: 360 })];
-    const { renderRenew, cardFor } = await import('./renewHarness');
+    const { renderRenew, cardFor, periodLabel } = await import('./renewHarness');
     await renderRenew();
-    await screen.findByText(/^30 /);
+    await screen.findByText(periodLabel(30));
 
     expect(cardFor(30).style.background).not.toContain(SELECTED_BORDER);
     expect(cardFor(360).style.background).not.toContain(SELECTED_BORDER);

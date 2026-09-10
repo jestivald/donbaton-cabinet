@@ -432,7 +432,15 @@ describe('LTE-пакет на периодах длиннее его цикла'
     // Шапка тарифа по-прежнему называет сам пакет и его цикл.
     expect(screen.getByText('LTE: 60 ГиБ')).toBeTruthy();
     expect(screen.getByText('каждые 30 дн.')).toBeTruthy();
+    // Отмеченный оператором период (180) выбран сразу — форма открывается на нём.
+    expect(
+      screen.getByText(
+        'LTE-пакет 60 ГиБ обновляется каждые 30 дней — 6 обновлений за срок подписки',
+      ),
+    ).toBeTruthy();
+
     // На месяце срок равен циклу — пояснять нечего.
+    fireEvent.click(screen.getByText('1 месяц'));
     expect(screen.queryByText(/обновляется каждые/)).toBeNull();
 
     fireEvent.click(screen.getByText('12 месяцев'));
