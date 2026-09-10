@@ -99,6 +99,14 @@ function selectTab(name: string) {
 describe('network categories in the purchase and switch catalog', () => {
   it('defaults to Wi-Fi + LTE, isolates categories and keeps legacy plans reachable', () => {
     render(catalog());
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Wi-Fi + LTE',
+      'Только Wi-Fi',
+      'Другие тарифы',
+    ]);
+    expect(screen.getByRole('tab', { name: 'Wi-Fi + LTE' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
     expect(screen.getByText('Везде')).toBeTruthy();
     expect(screen.getByText('LTE: 37 ГиБ')).toBeTruthy();
     expect(screen.getByText('каждые 28 дн.')).toBeTruthy();
@@ -135,7 +143,7 @@ describe('network categories in the purchase and switch catalog', () => {
     expect(screen.getByText(ru.subscription.network.switchUnavailable)).toBeTruthy();
   });
 
-  it('allows the expired managed subscription to purchase another category', () => {
+  it('opens Wi-Fi + LTE for the expired managed subscription and lets it purchase there', () => {
     const onSelectTariff = vi.fn();
     render(
       catalog({
@@ -148,9 +156,14 @@ describe('network categories in the purchase and switch catalog', () => {
         onSelectTariff,
       }),
     );
-    selectTab('Wi-Fi + LTE');
+    expect(screen.getByRole('tab', { name: 'Wi-Fi + LTE' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(screen.queryByText('Домашний')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: ru.subscription.purchase }));
     expect(onSelectTariff).toHaveBeenCalledExactlyOnceWith(lte);
+    selectTab('Только Wi-Fi');
+    expect(screen.getByText('Домашний')).toBeTruthy();
   });
 
   it('preserves active switches between legacy tariffs', () => {
@@ -177,7 +190,7 @@ describe('network categories in the purchase and switch catalog', () => {
     render(
       catalog({
         tariffs: [wifi, lte, { ...legacy, network_category: 'future_category' as never }],
-        subscription: { tariff_id: 3 } as Subscription,
+        subscription: { tariff_id: 3, is_active: true } as Subscription,
       }),
     );
     expect(screen.getByRole('tab', { name: 'Другие тарифы' }).getAttribute('aria-selected')).toBe(
@@ -209,7 +222,7 @@ describe('network categories in the purchase and switch catalog', () => {
     render(catalog({ tariffs: [wifi, lte] }));
     const current = screen.getByRole('tab', { name: 'Wi-Fi + LTE' });
     current.focus();
-    fireEvent.keyDown(current, { key: 'ArrowLeft' });
+    fireEvent.keyDown(current, { key: 'ArrowRight' });
     await waitFor(() => expect(screen.getByText('Домашний')).toBeTruthy());
     expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe(
       screen.getByRole('tab', { name: 'Только Wi-Fi' }).id,

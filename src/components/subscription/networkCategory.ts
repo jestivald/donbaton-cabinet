@@ -11,18 +11,35 @@ export function tariffCategory(tariff: Pick<Tariff, 'network_category'>): Tariff
   return networkCategory(tariff.network_category) ?? 'legacy';
 }
 
+function subscriptionCategory(
+  tariffs: Tariff[],
+  subscription: Pick<Subscription, 'network_category' | 'tariff_id'>,
+): TariffCategoryTab | null {
+  const currentTariff = tariffs.find(
+    (tariff) => tariff.is_current || tariff.id === subscription.tariff_id,
+  );
+  return (
+    networkCategory(subscription.network_category) ??
+    (currentTariff ? tariffCategory(currentTariff) : null)
+  );
+}
+
+/**
+ * The tab the catalog opens on.
+ *
+ * A live paid subscription may only be renewed inside its own category, so the
+ * catalog has to open there: `lockedSubscription` is that — and ONLY that —
+ * subscription, passed by the caller that owns the renewal lock. Whenever the
+ * customer is free to choose (no subscription, expired, trial, multi-tariff),
+ * the catalog opens on Wi-Fi + LTE, then Wi-Fi, then legacy.
+ */
 export function defaultTariffCategory(
   tariffs: Tariff[],
-  subscription: Pick<Subscription, 'network_category' | 'tariff_id'> | null,
+  lockedSubscription: Pick<Subscription, 'network_category' | 'tariff_id'> | null,
 ): TariffCategoryTab {
   const available = new Set(tariffs.map(tariffCategory));
-  const currentTariff = tariffs.find(
-    (tariff) => tariff.is_current || tariff.id === subscription?.tariff_id,
-  );
-  const current =
-    networkCategory(subscription?.network_category) ??
-    (currentTariff ? tariffCategory(currentTariff) : null);
-  if (current && available.has(current)) return current;
+  const locked = lockedSubscription && subscriptionCategory(tariffs, lockedSubscription);
+  if (locked && available.has(locked)) return locked;
   if (available.has('wifi_lte')) return 'wifi_lte';
   if (available.has('wifi')) return 'wifi';
   return 'legacy';

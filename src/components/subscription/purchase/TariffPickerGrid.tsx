@@ -66,22 +66,15 @@ export function TariffPickerGrid({
   });
   const availableCategories = new Set(eligibleTariffs.map(tariffCategory));
   const hasCategories = availableCategories.has('wifi') || availableCategories.has('wifi_lte');
-  const activeCategory =
-    selectedCategory && availableCategories.has(selectedCategory)
-      ? selectedCategory
-      : defaultTariffCategory(eligibleTariffs, subscription);
-  const visibleTariffs = hasCategories
-    ? eligibleTariffs.filter((tariff) => tariffCategory(tariff) === activeCategory)
-    : eligibleTariffs;
-  const categoryTabs: TariffCategoryTab[] = availableCategories.has('legacy')
-    ? ['wifi', 'wifi_lte', 'legacy']
-    : ['wifi', 'wifi_lte'];
   const currentCategory =
     networkCategory(subscription?.network_category) ??
     networkCategory(
       tariffs.find((tariff) => tariff.is_current || tariff.id === subscription?.tariff_id)
         ?.network_category,
     );
+  // A live paid subscription is locked to its own category until it expires —
+  // the single source of truth both for the blocked switch below and for the
+  // tab the catalog opens on.
   const hasActivePaidSubscription =
     !isMultiTariff &&
     subscription &&
@@ -93,6 +86,16 @@ export function TariffPickerGrid({
       purchaseOptions.subscription_is_expired
     ) &&
     (subscription.is_active || subscription.is_limited);
+  const activeCategory =
+    selectedCategory && availableCategories.has(selectedCategory)
+      ? selectedCategory
+      : defaultTariffCategory(eligibleTariffs, hasActivePaidSubscription ? subscription : null);
+  const visibleTariffs = hasCategories
+    ? eligibleTariffs.filter((tariff) => tariffCategory(tariff) === activeCategory)
+    : eligibleTariffs;
+  const categoryTabs: TariffCategoryTab[] = availableCategories.has('legacy')
+    ? ['wifi_lte', 'wifi', 'legacy']
+    : ['wifi_lte', 'wifi'];
 
   const formatPrice = (kopeks: number) =>
     kopeks === 0

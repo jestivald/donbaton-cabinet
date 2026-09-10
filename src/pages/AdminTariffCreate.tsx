@@ -559,8 +559,8 @@ export default function AdminTariffCreate() {
                 }}
               >
                 <option value="">{t('admin.tariffs.networkLegacy')}</option>
-                <option value="wifi">{t('subscription.network.wifi')}</option>
                 <option value="wifi_lte">{t('subscription.network.wifi_lte')}</option>
+                <option value="wifi">{t('subscription.network.wifi')}</option>
               </select>
               {isEdit && subscriptionsCount > 0 && (
                 <p className="text-xs text-dark-400">{t('admin.tariffs.networkCategoryLocked')}</p>
