@@ -124,23 +124,97 @@ describe('network categories in the purchase and switch catalog', () => {
     expect(screen.queryByText('Домашний')).toBeNull();
   });
 
-  it('selects the current category and prevents a paid managed switch before expiry', () => {
+  /**
+   * Смена сетевого тарифа = покупка другого тарифа на полный срок: остаток
+   * дней бэкенд перенесёт сам. Поэтому «Перейти» ведёт в обычный флоу
+   * покупки с выбором периода, а не в пропорциональный switch.
+   */
+  it('opens the current category and sells another network plan as a regular purchase', () => {
+    const onSelectTariff = vi.fn();
     const onSwitchTariff = vi.fn();
     render(
       catalog({
         subscription: { tariff_id: 1, network_category: 'wifi', is_active: true } as Subscription,
+        onSelectTariff,
         onSwitchTariff,
       }),
     );
     expect(screen.getByRole('tab', { name: 'Только Wi-Fi' }).getAttribute('aria-selected')).toBe(
       'true',
     );
+    expect(screen.getByText(ru.subscription.network.switchPurchaseRule)).toBeTruthy();
+    expect(screen.queryByText(ru.subscription.network.switchUnavailable)).toBeNull();
+
     selectTab('Wi-Fi + LTE');
+    fireEvent.click(screen.getByRole('button', { name: ru.subscription.switchTariff.switch }));
+    expect(onSelectTariff).toHaveBeenCalledExactlyOnceWith(lte);
+    expect(onSwitchTariff).not.toHaveBeenCalled();
+  });
+
+  it('keeps archived and network plans apart while the paid subscription runs', () => {
+    const onSelectTariff = vi.fn();
+    const onSwitchTariff = vi.fn();
+    const { unmount } = render(
+      catalog({
+        subscription: { tariff_id: 1, network_category: 'wifi', is_active: true } as Subscription,
+        onSelectTariff,
+        onSwitchTariff,
+      }),
+    );
+    selectTab('Другие тарифы');
     const blocked = screen.getByRole('button', { name: ru.subscription.network.afterExpiry });
     expect((blocked as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(blocked);
-    expect(onSwitchTariff).not.toHaveBeenCalled();
     expect(screen.getByText(ru.subscription.network.switchUnavailable)).toBeTruthy();
+
+    // И в обратную сторону: архивная подписка не уходит на сетевой тариф.
+    unmount();
+    render(
+      catalog({
+        subscription: { tariff_id: 3, is_active: true } as Subscription,
+        onSelectTariff,
+        onSwitchTariff,
+      }),
+    );
+    selectTab('Wi-Fi + LTE');
+    expect(
+      (
+        screen.getByRole('button', {
+          name: ru.subscription.network.afterExpiry,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(onSelectTariff).not.toHaveBeenCalled();
+    expect(onSwitchTariff).not.toHaveBeenCalled();
+  });
+
+  it('holds individual terms until the paid period ends and names the date', () => {
+    const onSelectTariff = vi.fn();
+    render(
+      catalog({
+        subscription: {
+          tariff_id: 2,
+          network_category: 'wifi_lte',
+          is_active: true,
+          lte_quota: {
+            renewal_requires_expiry: true,
+            legacy_compatibility_until: '2026-10-07T12:00:00Z',
+          },
+        } as Subscription,
+        onSelectTariff,
+      }),
+    );
+    expect(
+      screen.getByText(
+        i18n.t('subscription.network.legacyRenewalUntil', { date: '07.10.2026' }) as string,
+      ),
+    ).toBeTruthy();
+
+    selectTab('Только Wi-Fi');
+    const blocked = screen.getByRole('button', { name: ru.subscription.network.afterExpiry });
+    expect((blocked as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(blocked);
+    expect(onSelectTariff).not.toHaveBeenCalled();
   });
 
   it('opens Wi-Fi + LTE for the expired managed subscription and lets it purchase there', () => {

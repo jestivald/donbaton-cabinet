@@ -16,6 +16,15 @@ import {
   tariffCategory,
   type TariffCategoryTab,
 } from '../networkCategory';
+import {
+  crossesArchiveBoundary,
+  currentNetworkCategory,
+  findCurrentTariff,
+  livePaidSubscription,
+  renewalLockUntil,
+  renewalRequiresExpiry,
+} from '../tariffSwitch';
+import { uiLocale } from '../../../utils/uiLocale';
 import { TariffNetworkDetails } from '../TariffNetworkDetails';
 
 // ──────────────────────────────────────────────────────────────────
@@ -31,6 +40,11 @@ import { TariffNetworkDetails } from '../TariffNetworkDetails';
 //
 // Owns the category tab; calls back into the parent for selection
 // (`onSelectTariff`) and switch (`onSwitchTariff`).
+//
+// Переход между сетевыми тарифами — обычная покупка (`onSelectTariff`),
+// а не пропорциональный `onSwitchTariff`: клиент выбирает период и платит
+// полную цену, остаток текущего тарифа бэкенд прибавит к новому сроку.
+// Пропорциональный switch остался только у архивных тарифов.
 // ──────────────────────────────────────────────────────────────────
 
 export interface TariffPickerGridProps {
@@ -66,36 +80,41 @@ export function TariffPickerGrid({
   });
   const availableCategories = new Set(eligibleTariffs.map(tariffCategory));
   const hasCategories = availableCategories.has('wifi') || availableCategories.has('wifi_lte');
-  const currentCategory =
-    networkCategory(subscription?.network_category) ??
-    networkCategory(
-      tariffs.find((tariff) => tariff.is_current || tariff.id === subscription?.tariff_id)
-        ?.network_category,
-    );
-  // A live paid subscription is locked to its own category until it expires —
-  // the single source of truth both for the blocked switch below and for the
-  // tab the catalog opens on.
-  const hasActivePaidSubscription =
-    !isMultiTariff &&
-    subscription &&
-    !subscription.is_trial &&
-    !subscription.is_expired &&
-    !(
+  const currentTariff = findCurrentTariff(tariffs, subscription);
+  const currentCategory = currentNetworkCategory(subscription, currentTariff);
+  // Живая платная подписка — единственное состояние, где есть переносимый
+  // остаток дней и работают замки политики. Один источник правды и для
+  // кнопок ниже, и для вкладки, на которой открывается каталог.
+  const liveSubscription = livePaidSubscription(subscription, {
+    isMultiTariff,
+    expired: Boolean(
       purchaseOptions &&
-      'subscription_is_expired' in purchaseOptions &&
-      purchaseOptions.subscription_is_expired
-    ) &&
-    (subscription.is_active || subscription.is_limited);
+        'subscription_is_expired' in purchaseOptions &&
+        purchaseOptions.subscription_is_expired,
+    ),
+  });
+  const hasActivePaidSubscription = liveSubscription !== null;
+  // Индивидуальные условия: до конца оплаченного срока бэкенд не отдаст
+  // клиенту другой тариф — это единственный замок поверх категорий.
+  const renewalLocked = renewalRequiresExpiry(liveSubscription);
+  const renewalUntil = renewalLockUntil(liveSubscription);
   const activeCategory =
     selectedCategory && availableCategories.has(selectedCategory)
       ? selectedCategory
-      : defaultTariffCategory(eligibleTariffs, hasActivePaidSubscription ? subscription : null);
+      : defaultTariffCategory(eligibleTariffs, liveSubscription);
   const visibleTariffs = hasCategories
     ? eligibleTariffs.filter((tariff) => tariffCategory(tariff) === activeCategory)
     : eligibleTariffs;
   const categoryTabs: TariffCategoryTab[] = availableCategories.has('legacy')
     ? ['wifi_lte', 'wifi', 'legacy']
     : ['wifi_lte', 'wifi'];
+  const isCurrent = (tariff: Tariff) => tariff.is_current || tariff.id === subscription?.tariff_id;
+  // Архивные и сетевые тарифы бэкенд не смешивает, пока подписка жива.
+  const isArchiveLocked = (tariff: Tariff) =>
+    hasActivePaidSubscription &&
+    !isCurrent(tariff) &&
+    crossesArchiveBoundary(subscription, currentTariff, tariff);
+  const archivePolicyVisible = !renewalLocked && visibleTariffs.some(isArchiveLocked);
 
   const formatPrice = (kopeks: number) =>
     kopeks === 0
@@ -166,8 +185,19 @@ export function TariffPickerGrid({
         </div>
       )}
 
-      {hasActivePaidSubscription && (hasCategories || currentCategory) && (
+      {hasActivePaidSubscription && (hasCategories || currentCategory || renewalLocked) && (
         <p id={`${tabId}-switch-policy`} className="mb-4 text-sm text-dark-400">
+          {renewalLocked
+            ? renewalUntil
+              ? t('subscription.network.legacyRenewalUntil', {
+                  date: renewalUntil.toLocaleDateString(uiLocale()),
+                })
+              : t('subscription.network.legacyRenewalAfterExpiry')
+            : t('subscription.network.switchPurchaseRule')}
+        </p>
+      )}
+      {archivePolicyVisible && (
+        <p id={`${tabId}-archive-policy`} className="mb-4 text-sm text-dark-400">
           {t('subscription.network.switchUnavailable')}
         </p>
       )}
@@ -214,7 +244,7 @@ export function TariffPickerGrid({
             return 0;
           })
           .map((tariff) => {
-            const isCurrentTariff = tariff.is_current || tariff.id === subscription?.tariff_id;
+            const isCurrentTariff = isCurrent(tariff);
             const isSubscriptionExpired =
               isTariffsMode &&
               purchaseOptions &&
@@ -238,10 +268,16 @@ export function TariffPickerGrid({
               (subscription.is_active || subscription.is_limited);
             const isLegacySubscription =
               subscription && !subscription.is_trial && !subscription.tariff_id;
-            const isNetworkSwitchBlocked =
+            // Замок остался только там, где откажет и бэкенд: архивный ↔
+            // сетевой тариф и индивидуальные условия до конца срока.
+            const isBlocked = !isCurrentTariff && (renewalLocked || isArchiveLocked(tariff));
+            // Сетевой → сетевой: обычная покупка с выбором периода.
+            const isNetworkPurchaseSwitch =
               hasActivePaidSubscription &&
               !isCurrentTariff &&
-              (currentCategory || networkCategory(tariff.network_category));
+              !isBlocked &&
+              Boolean(currentCategory) &&
+              Boolean(networkCategory(tariff.network_category));
 
             return (
               <div
@@ -387,13 +423,22 @@ export function TariffPickerGrid({
                         {t('subscription.extend')}
                       </button>
                     )
-                  ) : isNetworkSwitchBlocked ? (
+                  ) : isBlocked ? (
                     <button
                       disabled
-                      aria-describedby={`${tabId}-switch-policy`}
+                      aria-describedby={
+                        renewalLocked ? `${tabId}-switch-policy` : `${tabId}-archive-policy`
+                      }
                       className="btn-secondary flex-1 py-2 text-sm disabled:opacity-50"
                     >
                       {t('subscription.network.afterExpiry')}
+                    </button>
+                  ) : isNetworkPurchaseSwitch ? (
+                    <button
+                      onClick={() => onSelectTariff(tariff)}
+                      className="btn-primary flex-1 py-2 text-sm"
+                    >
+                      {t('subscription.switchTariff.switch')}
                     </button>
                   ) : isLegacySubscription ? (
                     <button

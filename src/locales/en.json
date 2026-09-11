@@ -379,6 +379,7 @@
       "legacyPoolExpiry": "The next carried LTE allowance expires on {{date}}",
       "legacyUntil": "Your previously paid terms remain valid until {{date}}",
       "legacyRenewalAfterExpiry": "You can choose a new plan after this subscription expires. Until then, your previously paid terms remain valid.",
+      "legacyRenewalUntil": "Your previous individual terms remain valid until {{date}}. You can choose a new plan after that date.",
       "added": "Top-ups: {{traffic}}",
       "resetDate": "LTE allowance renews on {{date}}",
       "exhausted": "The LTE allowance is exhausted. This limit only applies to LTE connections.",
@@ -389,7 +390,8 @@
       "accountingStale": "Updating LTE data. LTE access is not confirmed yet; the remaining allowance reflects the last synchronization.",
       "nextAllowance": "From the next renewal: {{traffic}} of LTE",
       "topupExpiry": "The next extra allowance expires on {{date}}",
-      "switchUnavailable": "Until this subscription expires, you can renew the current plan or top up LTE. You can select a different plan after it expires.",
+      "switchPurchaseRule": "You can move to another plan at any time: it is a regular purchase of the new plan for a full term at its usual price. The remaining days of your current plan are kept and added to the new term.",
+      "switchUnavailable": "Archived and network plans are never mixed: a plan from the other group can be selected after the current subscription expires.",
       "afterExpiry": "After subscription expires",
       "intentStorageUnavailable": "Could not save this purchase in the current tab. Allow site storage and select the package again."
     },
@@ -619,7 +621,15 @@
       "switched": "Tariff switched",
       "notEnoughBalance": "Insufficient balance",
       "dailyPayment": "Daily payment",
-      "dailyChargeDescription": "Charged daily from your balance"
+      "dailyChargeDescription": "Charged daily from your balance",
+      "noticeTitle": "Moving to another plan",
+      "carryOver": "The remaining {{remaining}} days of your current plan are kept — new term: {{remaining}} + {{period}} = {{total}} days.",
+      "devicesNow": "Devices: {{from}} → {{to}} (immediately)",
+      "lteImmediate": "LTE allowance: {{gb}} GiB immediately",
+      "lteAfterLegacy": "Your previous LTE allowance stays valid until {{date}}, then {{gb}} GiB every {{days}} days.",
+      "lteNone": "The new plan has no LTE allowance",
+      "devicesReset": "Connected devices will be reset — connect them again",
+      "noRefund": "The price difference is not refunded"
     },
     "switchTraffic": {
       "title": "Change Traffic",

@@ -27,19 +27,20 @@ function subscriptionCategory(
 /**
  * The tab the catalog opens on.
  *
- * A live paid subscription may only be renewed inside its own category, so the
- * catalog has to open there: `lockedSubscription` is that — and ONLY that —
- * subscription, passed by the caller that owns the renewal lock. Whenever the
- * customer is free to choose (no subscription, expired, trial, multi-tariff),
- * the catalog opens on Wi-Fi + LTE, then Wi-Fi, then legacy.
+ * A live paid subscription opens the catalog on its own category — that is
+ * where renewal lives and where a move to another plan starts from, while
+ * every other tab stays clickable. `liveSubscription` is that — and ONLY
+ * that — subscription, passed by the caller that owns the check. Whenever the
+ * customer has no live paid plan (no subscription, expired, trial,
+ * multi-tariff), the catalog opens on Wi-Fi + LTE, then Wi-Fi, then legacy.
  */
 export function defaultTariffCategory(
   tariffs: Tariff[],
-  lockedSubscription: Pick<Subscription, 'network_category' | 'tariff_id'> | null,
+  liveSubscription: Pick<Subscription, 'network_category' | 'tariff_id'> | null,
 ): TariffCategoryTab {
   const available = new Set(tariffs.map(tariffCategory));
-  const locked = lockedSubscription && subscriptionCategory(tariffs, lockedSubscription);
-  if (locked && available.has(locked)) return locked;
+  const current = liveSubscription && subscriptionCategory(tariffs, liveSubscription);
+  if (current && available.has(current)) return current;
   if (available.has('wifi_lte')) return 'wifi_lte';
   if (available.has('wifi')) return 'wifi';
   return 'legacy';
