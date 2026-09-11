@@ -12,10 +12,11 @@ import { openPaymentUrl } from '../../../utils/openPaymentUrl';
 import { getMonthlyPriceKopeks } from '../../../utils/pricing';
 import { pickBestValue } from '../../../utils/bestValue';
 import InsufficientBalancePrompt from '../../InsufficientBalancePrompt';
-import type { Tariff, TariffPeriod } from '../../../types';
+import type { Subscription, Tariff, TariffPeriod } from '../../../types';
 import { BestValueBadge } from '../BestValueBadge';
 import { TariffNetworkDetails } from '../TariffNetworkDetails';
 import { networkCategory } from '../networkCategory';
+import { TariffSwitchNotice } from './TariffSwitchNotice';
 
 // ──────────────────────────────────────────────────────────────────
 // TariffPurchaseForm
@@ -33,12 +34,21 @@ import { networkCategory } from '../networkCategory';
 // the current balance (for inline insufficient-balance prompts),
 // the subscription id (for the renew-this-subscription flow), and
 // onBack to clear its own selection state.
+//
+// Покупка другого тарифа поверх живой подписки — это и есть «смена
+// тарифа»: цена обычная, а остаток дней бэкенд прибавит к новому сроку.
+// Что именно изменится, объясняет <TariffSwitchNotice> под выбором
+// периода (для него и приходят liveSubscription/currentTariff).
 // ──────────────────────────────────────────────────────────────────
 
 export interface TariffPurchaseFormProps {
   tariff: Tariff;
   subscriptionId: number | undefined;
   balanceKopeks: number | undefined;
+  /** Живая платная подписка, с которой уходит клиент (см. livePaidSubscription). */
+  liveSubscription?: Subscription | null;
+  /** Её тариф из того же каталога — источник цены и лимита устройств. */
+  currentTariff?: Tariff | null;
   /** СБП-оформление (Platega recurrent) доступно — показать вторую CTA. */
   sbpPurchaseEnabled?: boolean;
   /** Оформление привязкой Lava доступно — показать вторую CTA. */
@@ -50,6 +60,8 @@ export function TariffPurchaseForm({
   tariff,
   subscriptionId,
   balanceKopeks,
+  liveSubscription = null,
+  currentTariff = null,
   sbpPurchaseEnabled = false,
   lavaPurchaseEnabled = false,
   onBack,
@@ -438,6 +450,13 @@ export function TariffPurchaseForm({
                 })}
               </p>
             )}
+
+            <TariffSwitchNotice
+              liveSubscription={liveSubscription}
+              currentTariff={currentTariff}
+              tariff={tariff}
+              periodDays={useCustomDays ? customDays : (selectedTariffPeriod?.days ?? 0)}
+            />
 
             {/* No periods available fallback */}
             {tariff.periods.length === 0 &&

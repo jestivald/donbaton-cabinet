@@ -12,6 +12,7 @@ import { SwitchTariffSheet } from '../components/subscription/sheets/SwitchTarif
 import { TariffPurchaseForm } from '../components/subscription/purchase/TariffPurchaseForm';
 import { TariffPickerGrid } from '../components/subscription/purchase/TariffPickerGrid';
 import { ClassicPurchaseWizard } from '../components/subscription/purchase/ClassicPurchaseWizard';
+import { findCurrentTariff, livePaidSubscription } from '../components/subscription/tariffSwitch';
 import { ExclamationIcon, SparklesIcon } from '@/components/icons';
 import { PageSkeleton, Skeleton } from '@/components/ui/skeleton';
 
@@ -60,6 +61,20 @@ export default function SubscriptionPurchase() {
     staleTime: 60_000,
   });
   const isMultiTariff = multiSubData?.multi_tariff_enabled ?? false;
+
+  // Покупка другого тарифа поверх живой платной подписки — это смена тарифа:
+  // форма покупки объясняет перенос остатка и новые условия. Тот же расчёт
+  // «живой подписки», что и в каталоге, иначе блок врал бы истёкшим.
+  const liveSubscription = livePaidSubscription(subscription, {
+    isMultiTariff,
+    expired: Boolean(
+      isTariffsMode &&
+        purchaseOptions &&
+        'subscription_is_expired' in purchaseOptions &&
+        purchaseOptions.subscription_is_expired,
+    ),
+  });
+  const currentTariff = findCurrentTariff(tariffs, subscription);
 
   // (active promo discount + applyPromoDiscount live in usePromoDiscount;
   //  consumed directly by the sub-components, not threaded as props)
@@ -288,6 +303,8 @@ export default function SubscriptionPurchase() {
                 tariff={selectedTariff}
                 subscriptionId={subscriptionId}
                 balanceKopeks={purchaseOptions?.balance_kopeks}
+                liveSubscription={liveSubscription}
+                currentTariff={currentTariff}
                 sbpPurchaseEnabled={
                   isTariffsMode &&
                   purchaseOptions !== undefined &&
