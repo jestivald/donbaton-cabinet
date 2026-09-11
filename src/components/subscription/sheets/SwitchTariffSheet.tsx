@@ -28,15 +28,20 @@ import { Skeleton, SkeletonGroup } from '../../ui/skeleton';
 // backend reports `subscription_expired` (the user's subscription
 // lapsed while the modal was open), the sheet hands off to the
 // parent via `onExpiredFallback(tariff)`, which opens the regular
-// TariffPurchaseForm instead of attempting another switch.
+// TariffPurchaseForm instead of attempting another switch. The same
+// handoff runs on the preview, where the refusal arrives before the user
+// ever presses the button; a policy refusal that comes as a plain
+// `detail: "text"` is shown as text rather than as an empty panel.
 // ──────────────────────────────────────────────────────────────────
 
 // The backend rejects a switch that must instead go through the purchase flow:
 // the subscription lapsed (`subscription_expired`), it is a trial that has no
 // paid value to prorate and would otherwise be handed a full target period
-// (`trial_cannot_switch`, bug #629889), or it sits on a free 0₽ tariff whose
+// (`trial_cannot_switch`, bug #629889), it sits on a free 0₽ tariff whose
 // spammed/gifted remainder must reset rather than be prorated and carried
-// (`free_tariff_cannot_switch`, TARIFF_SWITCH_RESET_FREE_DAYS). All arrive as
+// (`free_tariff_cannot_switch`, TARIFF_SWITCH_RESET_FREE_DAYS), or it is a
+// network plan, where moving to another plan is a regular full-price purchase
+// that carries the remaining days (`network_purchase_only`). All arrive as
 // detail.code + use_purchase_flow=true; some payloads use the legacy
 // `error_code` key, so we accept either.
 function shouldUsePurchaseFlow(error: unknown): boolean {
@@ -49,7 +54,8 @@ function shouldUsePurchaseFlow(error: unknown): boolean {
   return (
     (code === 'subscription_expired' ||
       code === 'trial_cannot_switch' ||
-      code === 'free_tariff_cannot_switch') &&
+      code === 'free_tariff_cannot_switch' ||
+      code === 'network_purchase_only') &&
     detail.use_purchase_flow === true
   );
 }
@@ -83,11 +89,16 @@ export function SwitchTariffSheet({
       ? t('subscription.free', 'Бесплатно')
       : `${formatAmount(kopeks / 100)} ${currencySymbol}`;
 
-  const { data: switchPreview, isLoading: switchPreviewLoading } = useQuery({
+  const {
+    data: switchPreview,
+    isLoading: switchPreviewLoading,
+    error: switchPreviewError,
+  } = useQuery({
     queryKey: ['tariff-switch-preview', tariffId],
     queryFn: () => subscriptionApi.previewTariffSwitch(tariffId!, subscriptionId),
     enabled: !!tariffId,
   });
+  const targetTariff = tariffs.find((tariff) => tariff.id === tariffId) ?? null;
 
   const switchMutation = useMutation({
     mutationFn: (id: number) => subscriptionApi.switchTariff(id, subscriptionId),
@@ -101,16 +112,31 @@ export function SwitchTariffSheet({
       // Backend signal: this subscription can't be switched (it lapsed, or it's
       // a trial). Hand the selected tariff back to the parent so it opens the
       // regular purchase form instead.
-      if (shouldUsePurchaseFlow(error)) {
-        const targetTariff = tariffs.find((tariff) => tariff.id === tariffId);
-        if (targetTariff) {
-          onClose();
-          onExpiredFallback(targetTariff);
-          queryClient.invalidateQueries({ queryKey: ['purchase-options', subscriptionId] });
-        }
+      if (shouldUsePurchaseFlow(error) && targetTariff) {
+        onClose();
+        onExpiredFallback(targetTariff);
+        queryClient.invalidateQueries({ queryKey: ['purchase-options', subscriptionId] });
       }
     },
   });
+
+  // Тот же отказ на предпросмотре: сетевой тариф покупается обычным флоу,
+  // поэтому уводим в форму покупки, не дожидаясь нажатия «Перейти».
+  const previewNeedsPurchaseFlow = shouldUsePurchaseFlow(switchPreviewError);
+  useEffect(() => {
+    if (!open || !previewNeedsPurchaseFlow || !targetTariff) return;
+    onClose();
+    onExpiredFallback(targetTariff);
+    queryClient.invalidateQueries({ queryKey: ['purchase-options', subscriptionId] });
+  }, [
+    open,
+    previewNeedsPurchaseFlow,
+    targetTariff,
+    onClose,
+    onExpiredFallback,
+    queryClient,
+    subscriptionId,
+  ]);
 
   // Smoothly scroll the panel into view when opened.
   useEffect(() => {
@@ -141,10 +167,14 @@ export function SwitchTariffSheet({
         <SkeletonGroup className="space-y-3">
           <Skeleton variant="card" count={3} className="h-16" />
         </SkeletonGroup>
+      ) : switchPreviewError && !previewNeedsPurchaseFlow ? (
+        // Отказ политики приходит строкой в detail — показываем его текстом.
+        <div className="text-center text-sm text-error-400">
+          {getErrorMessage(switchPreviewError)}
+        </div>
       ) : (
         switchPreview &&
         (() => {
-          const targetTariff = tariffs.find((tariff) => tariff.id === tariffId);
           // Та же котировка, что на карточке и экране активации: промокод один раз.
           const dailyQuote = targetTariff
             ? dailyPriceQuote(targetTariff, applyPromoDiscount)
