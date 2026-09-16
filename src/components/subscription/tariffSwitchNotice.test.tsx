@@ -129,13 +129,19 @@ describe('покупка другого сетевого тарифа = смен
     expect(screen.queryByText(text('devicesReset'))).toBeNull();
     expect(screen.queryByText(text('noRefund'))).toBeNull();
     // Цена — обычная полная цена периода, без пропорций и доплат.
-    expect(screen.getByText(ru.subscription.total).parentElement?.textContent).toContain('499 ₽');
+    // Неразрывный пробел перед «₽» — апстрим v1.76.0; textContent его не
+    // нормализует, в отличие от getByText.
+    expect(screen.getByText(ru.subscription.total).parentElement?.textContent).toContain(
+      '499\u00A0₽',
+    );
 
     fireEvent.click(screen.getByText('3 месяца'));
     expect(
       screen.getByText(text('carryOver', { remaining: 40, period: 90, total: 130 })),
     ).toBeTruthy();
-    expect(screen.getByText(ru.subscription.total).parentElement?.textContent).toContain('1299 ₽');
+    expect(screen.getByText(ru.subscription.total).parentElement?.textContent).toContain(
+      '1299\u00A0₽',
+    );
   });
 
   it('в фазе прежних оплаченных условий обещает новый LTE-пакет только после неё', () => {

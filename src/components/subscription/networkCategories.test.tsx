@@ -523,14 +523,20 @@ describe('LTE-пакет на периодах длиннее его цикла'
         'LTE-пакет 60 ГиБ обновляется каждые 30 дней — 12 обновлений за срок подписки',
       ),
     ).toBeTruthy();
-    expect(screen.getByText(ru.subscription.total).parentElement?.textContent).toContain('1799 ₽');
+    // Цена склеена неразрывным пробелом (апстрим v1.76.0: «₽» не отрывается
+    // от числа), а textContent, в отличие от getByText, пробелы не нормализует.
+    expect(screen.getByText(ru.subscription.total).parentElement?.textContent).toContain(
+      '1799\u00A0₽',
+    );
 
     fireEvent.click(screen.getByText('3 месяца'));
     expect(screen.getByText(/— 3 обновления за срок подписки/)).toBeTruthy();
 
     fireEvent.click(screen.getByText('1 месяц'));
     expect(screen.queryByText(/обновляется каждые/)).toBeNull();
-    expect(screen.getByText(ru.subscription.total).parentElement?.textContent).toContain('299 ₽');
+    expect(screen.getByText(ru.subscription.total).parentElement?.textContent).toContain(
+      '299\u00A0₽',
+    );
   });
 
   it('не обещает обновление пакета тарифу без LTE', () => {
