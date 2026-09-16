@@ -61,6 +61,10 @@ export default function AdminTariffCreate() {
   const [selectedPromoGroups, setSelectedPromoGroups] = useState<number[]>([]);
   const [dailyPriceKopeks, setDailyPriceKopeks] = useState<number | ''>(0);
   const [lavaProductId, setLavaProductId] = useState('');
+  // Тег панели Remnawave: сервер поднимает регистр и проверяет формат
+  const [panelTag, setPanelTag] = useState('');
+  // Дни триала на этом тарифе; '' — глобальная настройка
+  const [trialDurationDays, setTrialDurationDays] = useState<number | ''>('');
 
   // Traffic topup
   const [trafficTopupEnabled, setTrafficTopupEnabled] = useState(false);
@@ -140,6 +144,8 @@ export default function AdminTariffCreate() {
       );
       setDailyPriceKopeks(data.daily_price_kopeks || 0);
       setLavaProductId(data.lava_product_id || '');
+      setPanelTag(data.panel_tag || '');
+      setTrialDurationDays(data.trial_duration_days ?? '');
       setTrafficTopupEnabled(data.traffic_topup_enabled || false);
       setMaxTopupTrafficGb(data.max_topup_traffic_gb || 0);
       setTrafficTopupPackages(data.traffic_topup_packages || {});
@@ -171,6 +177,7 @@ export default function AdminTariffCreate() {
 
   const handleSubmit = () => {
     const isDaily = tariffType === 'daily';
+    const highlightPayload = isDaily ? null : highlightPeriodDays;
 
     // PATCH applies a field only when it is present in the payload, so empty
     // values ('' / []) must still be sent when editing — omitting them makes
@@ -192,8 +199,10 @@ export default function AdminTariffCreate() {
       max_device_limit: toNumber(maxDeviceLimit) > 0 ? toNumber(maxDeviceLimit) : undefined,
       tier_level: toNumber(tierLevel, 1),
       period_prices: isDaily ? [] : periodPrices.filter((p) => p.price_kopeks >= 0),
-      // 0 — «снять выделение»: пустое поле означало бы «не трогать».
-      highlight_period_days: isDaily ? 0 : (highlightPeriodDays ?? 0),
+      // Выделение необязательно. На правке 0 — «снять выделение» (пустое поле
+      // означало бы «не трогать»); на создании снимать нечего, и без отметки
+      // поле не уходит — сервер отверг бы ноль.
+      highlight_period_days: isEdit ? (highlightPayload ?? 0) : (highlightPayload ?? undefined),
       allowed_squads: selectedSquads,
       external_squad_uuid: selectedExternalSquad || null,
       promo_group_ids: selectedPromoGroups,
@@ -204,6 +213,12 @@ export default function AdminTariffCreate() {
       daily_price_kopeks: isDaily ? toNumber(dailyPriceKopeks) : 0,
       // Пустая строка отвязывает тариф от продукта Lava
       lava_product_id: networkCategory ? '' : lavaProductId.trim(),
+      // Пустая строка снимает тег панели (на правке); формат проверяет сервер
+      panel_tag: panelTag.trim(),
+      // Дни триала: пусто — глобальная настройка. У сетевых тарифов триала нет
+      // (список тарифов не показывает им переключатель), поэтому всегда null.
+      trial_duration_days:
+        networkCategory || toNumber(trialDurationDays) <= 0 ? null : toNumber(trialDurationDays),
       traffic_reset_mode: networkCategory ? 'NO_RESET' : trafficResetMode,
     };
 
@@ -589,6 +604,49 @@ export default function AdminTariffCreate() {
                   <p className="mt-2 text-xs text-dark-400">{t('admin.tariffs.ltePeriodHint')}</p>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Remnawave panel tag */}
+          <div>
+            <label
+              htmlFor="tariff-panel-tag"
+              className="mb-2 block text-sm font-medium text-dark-300"
+            >
+              {t('admin.tariffs.panelTagLabel')}
+            </label>
+            <input
+              id="tariff-panel-tag"
+              type="text"
+              value={panelTag}
+              onChange={(e) => setPanelTag(e.target.value)}
+              className="input w-full uppercase"
+              maxLength={16}
+              placeholder="PAID_PRO"
+            />
+            <p className="mt-2 text-xs text-dark-500">{t('admin.tariffs.panelTagDesc')}</p>
+          </div>
+
+          {/* Trial days on this tariff — сетевым тарифам триал не выдаётся */}
+          {!networkCategory && (
+            <div>
+              <label
+                htmlFor="tariff-trial-days"
+                className="mb-2 block text-sm font-medium text-dark-300"
+              >
+                {t('admin.tariffs.trialDaysLabel')}
+              </label>
+              <input
+                id="tariff-trial-days"
+                type="number"
+                min={1}
+                value={trialDurationDays}
+                onChange={(e) =>
+                  setTrialDurationDays(e.target.value === '' ? '' : Number(e.target.value))
+                }
+                className="input w-full"
+              />
+              <p className="mt-2 text-xs text-dark-500">{t('admin.tariffs.trialDaysDesc')}</p>
             </div>
           )}
 
