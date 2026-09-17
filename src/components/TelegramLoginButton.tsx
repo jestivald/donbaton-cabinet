@@ -8,6 +8,7 @@ import { authApi } from '../api/auth';
 import { useAuthStore } from '../store/auth';
 import { useNavigate } from 'react-router';
 import { getPendingCampaignSlug } from '../utils/campaign';
+import { getPendingReferralCode } from '../utils/referral';
 import { copyToClipboard } from '../utils/clipboard';
 import { getApiErrorMessage, isEndpointMissingError } from '../utils/api-error';
 import { useLegalConsentGate } from '../hooks/useLegalConsentGate';
@@ -295,16 +296,21 @@ export default function TelegramLoginButton({ referralCode }: TelegramLoginButto
     try {
       // Consume campaign slug ONCE (first call only).
       // Clears localStorage on first call, so subsequent retries reuse the ref.
-      // Note: referral code is NOT consumed here — deep link auth is for existing
-      // bot users where referrals don't apply. Leaving it in localStorage allows
-      // other auth methods (OIDC, widget) to pick it up if the user switches paths.
+      // Реферальный код здесь НЕ вычитывается из localStorage (его может
+      // подхватить другой способ входа, если пользователь передумает), но
+      // отправляется вместе с запросом токена: гость по ссылке `?ref=` может
+      // ещё не иметь аккаунта в боте и зарегистрируется именно там — localStorage
+      // браузера туда не доедет, а токен доедет.
       if (!codesConsumedRef.current) {
         capturedCampaignRef.current = getPendingCampaignSlug();
         codesConsumedRef.current = true;
       }
       const capturedCampaign = capturedCampaignRef.current;
 
-      const response = await authApi.requestDeepLinkToken();
+      const response = await authApi.requestDeepLinkToken(
+        referralCode || getPendingReferralCode(),
+        capturedCampaign,
+      );
       const { token, bot_username, expires_in } = response;
       setDeepLinkToken(token);
       setDeepLinkBotUsername(bot_username || botUsername);
@@ -380,7 +386,7 @@ export default function TelegramLoginButton({ referralCode }: TelegramLoginButto
       // 404 = the deep-link auth routes don't exist on this bot build (< v3.33.0)
       setDeepLinkError(t(isEndpointMissingError(err) ? 'auth.botOutdated' : 'common.error'));
     }
-  }, [botUsername, loginWithDeepLink, navigate, t]);
+  }, [botUsername, loginWithDeepLink, navigate, referralCode, t]);
 
   // Auto-start deep link auth when script fails OR the user opts in manually
   // (with cancellation for Strict Mode)

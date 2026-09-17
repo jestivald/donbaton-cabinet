@@ -327,7 +327,13 @@ export const authApi = {
     return response.data;
   },
 
-  requestDeepLinkToken: async (): Promise<{
+  // referralCode едет вместе с токеном: гость по ссылке `?ref=` жмёт «Войти
+  // через Telegram», попадает в бота без аккаунта и регистрируется ТАМ — до
+  // бота localStorage браузера не доходит, а токен доходит.
+  requestDeepLinkToken: async (
+    referralCode?: string | null,
+    campaignSlug?: string | null,
+  ): Promise<{
     token: string;
     bot_username: string;
     expires_in: number;
@@ -336,7 +342,10 @@ export const authApi = {
       token: string;
       bot_username: string;
       expires_in: number;
-    }>('/cabinet/auth/deeplink/request');
+    }>('/cabinet/auth/deeplink/request', {
+      referral_code: referralCode || undefined,
+      campaign_slug: campaignSlug || undefined,
+    });
     return response.data;
   },
 
