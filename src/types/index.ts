@@ -147,6 +147,8 @@ export interface Subscription {
   traffic_reset_mode?: string;
   network_category?: NetworkCategory | null;
   lte_quota?: LteQuota | null;
+  /** Старая подписка (куплена в классике, тарифа нет, оператор на тарифах): продления и автоплатежа нет, только переход на тариф. */
+  requires_tariff_selection?: boolean;
 }
 
 // Response wrapper for subscription status endpoint
@@ -174,6 +176,8 @@ export interface SubscriptionListItem {
   connected_squads: string[] | null;
   network_category?: NetworkCategory | null;
   lte_quota?: LteQuota | null;
+  /** Старая подписка (куплена в классике, тарифа нет, оператор на тарифах): карточка ведёт на выбор тарифа. */
+  requires_tariff_selection?: boolean;
 }
 
 // Response from GET /cabinet/subscriptions (multi-tariff)

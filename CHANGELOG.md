@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.79.0](https://github.com/BEDOLAGA-DEV/bedolaga-cabinet/compare/v1.78.0...v1.79.0) (2026-09-22)
+
+
+### Features
+
+* **admin:** кнопка «Пересчитать участников» в группах скидок ([fd8d0c2](https://github.com/BEDOLAGA-DEV/bedolaga-cabinet/commit/fd8d0c2a87913f801958a53f3c0531022b9bb1bf))
+* **broadcasts:** email по промогруппе и одному пользователю из карточки ([516c16b](https://github.com/BEDOLAGA-DEV/bedolaga-cabinet/commit/516c16be777f9e5eabfeccdf27c9622e61831dca))
+* **cabinet:** простой вид кабинета для покупателя ([b247fbf](https://github.com/BEDOLAGA-DEV/bedolaga-cabinet/commit/b247fbfa0ae2151b4ab397c60170e58f3eaa6021))
+* **grace:** переключатель обнуления счётчика трафика при выдаче ([347ee33](https://github.com/BEDOLAGA-DEV/bedolaga-cabinet/commit/347ee33d8807848849c69c2637d95373045b0007))
+* **reminders:** админ-раздел «Напоминания» — список, форма, аудитория, тест себе ([ea3bd71](https://github.com/BEDOLAGA-DEV/bedolaga-cabinet/commit/ea3bd716b3d1bde13f9952eb97b8220f060dc9c9))
+* **reminders:** карточки напоминаний на главной кабинета ([1c0070f](https://github.com/BEDOLAGA-DEV/bedolaga-cabinet/commit/1c0070ff98344482096fe74e50f057ad988512e2))
+
+
+### Bug Fixes
+
+* **branding:** иконка ярлыка без рамки цвета темы вокруг логотипа-плитки ([19ecdd5](https://github.com/BEDOLAGA-DEV/bedolaga-cabinet/commit/19ecdd5f74c48fb06cf86c2012cd036691b09d16))
+* **cabinet:** платный триал в простом виде не заводит в тупик ([501c9c3](https://github.com/BEDOLAGA-DEV/bedolaga-cabinet/commit/501c9c33cbf8b5aef3a01e993ba9d8a26e167897))
+* **reminders:** проверки формы, обновление карточек при возврате во вкладку, форма не сбрасывается при наборе ([5927be8](https://github.com/BEDOLAGA-DEV/bedolaga-cabinet/commit/5927be80445b09bfacd49c2d24e52330afbc84c3))
+* **reminders:** форма напоминания — без кнопки не шлёт её тексты, тариф без ID не уходит в запрос ([4ff777a](https://github.com/BEDOLAGA-DEV/bedolaga-cabinet/commit/4ff777a1473065fd9a59c740fe5954650de23e08))
+
+## [1.78.0](https://github.com/BEDOLAGA-DEV/bedolaga-cabinet/compare/v1.77.0...v1.78.0) (2026-09-18)
+
+
+### Features
+
+* **subscription:** старая подписка без тарифа ведёт на переход на тариф, а не на продление ([4fea85e](https://github.com/BEDOLAGA-DEV/bedolaga-cabinet/commit/4fea85e4b1e05f1f3165926e6853196f824811f6))
+
+
+### Bug Fixes
+
+* **shell:** кнопка «Выйти» только в браузере ([c083353](https://github.com/BEDOLAGA-DEV/bedolaga-cabinet/commit/c083353adbb32c796ad42bc44e7958929c59498d))
+* **subscription:** не предлагать «купить ещё», пока есть старая подписка ([78c4ba4](https://github.com/BEDOLAGA-DEV/bedolaga-cabinet/commit/78c4ba42e83258073daab3baec5a6320f83914e2))
+* **subscription:** старой подписке не показывать докупки, на карточке — настоящая кнопка перехода ([645b5d1](https://github.com/BEDOLAGA-DEV/bedolaga-cabinet/commit/645b5d1969e39e406eb822adf561b631c3ab9528))
+
 ## [1.77.0](https://github.com/BEDOLAGA-DEV/bedolaga-cabinet/compare/v1.76.1...v1.77.0) (2026-09-17)
 
 

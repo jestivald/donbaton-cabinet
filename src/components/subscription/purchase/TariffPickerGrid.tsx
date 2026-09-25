@@ -26,6 +26,14 @@ import {
 } from '../tariffSwitch';
 import { uiLocale } from '../../../utils/uiLocale';
 import { TariffNetworkDetails } from '../TariffNetworkDetails';
+import { tariffAction, type TariffActionKind } from './tariffAction';
+
+/** Подпись кнопки для действий, которые ведут в один и тот же сценарий выбора. */
+const TARIFF_ACTION_LABEL: Record<Exclude<TariffActionKind, 'current-daily' | 'switch'>, string> = {
+  extend: 'subscription.extend',
+  moveToTariff: 'subscription.cta.moveToTariff',
+  purchase: 'subscription.purchase',
+};
 
 // ──────────────────────────────────────────────────────────────────
 // TariffPickerGrid
@@ -233,29 +241,19 @@ export function TariffPickerGrid({
           })
           .map((tariff) => {
             const isCurrentTariff = isCurrent(tariff);
-            const isSubscriptionExpired =
-              isTariffsMode &&
-              purchaseOptions &&
-              'subscription_is_expired' in purchaseOptions &&
-              purchaseOptions.subscription_is_expired === true;
-            // Free (0₽) source tariff: the backend blocks the prorated switch
-            // (free_tariff_cannot_switch) — offer the purchase flow instead.
-            const isOnFreeTariff =
-              isTariffsMode &&
-              purchaseOptions &&
-              'subscription_on_free_tariff' in purchaseOptions &&
-              purchaseOptions.subscription_on_free_tariff === true;
-            const canSwitch =
-              !isMultiTariff &&
-              subscription &&
-              subscription.tariff_id &&
-              !isCurrentTariff &&
-              !subscription.is_trial &&
-              !isSubscriptionExpired &&
-              !isOnFreeTariff &&
-              (subscription.is_active || subscription.is_limited);
-            const isLegacySubscription =
-              subscription && !subscription.is_trial && !subscription.tariff_id;
+            // Ветвление кнопки живёт в tariffAction(): витрин стало две
+            // (обычная и простая), и расхождение в этом условии списало бы с
+            // части людей не ту сумму.
+            const action = tariffAction({
+              tariff,
+              subscription,
+              purchaseOptions,
+              isTariffsMode,
+              isMultiTariff,
+            });
+            // ДонБатон: политика сетевых тарифов проверяется ДО tariffAction() и
+            // в прежнем порядке форка (замок → сетевой переход → решение апстрима).
+            // Простой вид (TariffPickerLite) этих проверок не знает — не включать.
             // Замок остался только там, где откажет и бэкенд: архивный ↔
             // сетевой тариф и индивидуальные условия до конца срока.
             const isBlocked = !isCurrentTariff && (renewalLocked || isArchiveLocked(tariff));
@@ -398,19 +396,10 @@ export function TariffPickerGrid({
 
                 {/* Action Buttons */}
                 <div className="mt-4 flex gap-2">
-                  {isCurrentTariff ? (
-                    subscription?.is_daily ? (
-                      <div className="flex-1 py-2 text-center text-sm text-dark-500">
-                        {t('subscription.currentTariff')}
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => onSelectTariff(tariff)}
-                        className="btn-primary flex-1 py-2 text-sm"
-                      >
-                        {t('subscription.extend')}
-                      </button>
-                    )
+                  {action === 'current-daily' ? (
+                    <div className="flex-1 py-2 text-center text-sm text-dark-500">
+                      {t('subscription.currentTariff')}
+                    </div>
                   ) : isBlocked ? (
                     <button
                       disabled
@@ -428,14 +417,7 @@ export function TariffPickerGrid({
                     >
                       {t('subscription.switchTariff.switch')}
                     </button>
-                  ) : isLegacySubscription ? (
-                    <button
-                      onClick={() => onSelectTariff(tariff)}
-                      className="btn-primary flex-1 py-2 text-sm"
-                    >
-                      {t('subscription.tariff.selectForRenewal')}
-                    </button>
-                  ) : canSwitch ? (
+                  ) : action === 'switch' ? (
                     <button
                       onClick={() => onSwitchTariff(tariff.id)}
                       className="btn-secondary flex-1 py-2 text-sm"
@@ -447,7 +429,7 @@ export function TariffPickerGrid({
                       onClick={() => onSelectTariff(tariff)}
                       className="btn-primary flex-1 py-2 text-sm"
                     >
-                      {t('subscription.purchase')}
+                      {t(TARIFF_ACTION_LABEL[action])}
                     </button>
                   )}
                 </div>

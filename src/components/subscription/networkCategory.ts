@@ -1,4 +1,5 @@
 import type { NetworkCategory, Subscription, Tariff } from '../../types';
+import { needsTariff } from '../../utils/legacySubscription';
 
 export type TariffCategoryTab = NetworkCategory | 'legacy';
 
@@ -54,4 +55,33 @@ export function canBuyTraffic(
   if (category === 'wifi_lte')
     return subscription.lte_quota != null && !subscription.lte_quota.is_unlimited;
   return subscription.traffic_limit_gb > 0;
+}
+
+/**
+ * Блок «Дополнительно» на странице подписки — замена апстримного
+ * showsAddonOptions() с политикой форка: сетевой подписке (Wi-Fi / Wi-Fi + LTE)
+ * устройства не докупаются, блок нужен ей только ради LTE-пакета
+ * (canBuyTraffic). Старой подписке без тарифа (needsTariff) докупок нет, как у
+ * апстрима: её путь — переход на тариф.
+ */
+export function showsNetworkAddonOptions(
+  subscription: Pick<
+    Subscription,
+    | 'is_active'
+    | 'is_limited'
+    | 'is_trial'
+    | 'device_limit'
+    | 'network_category'
+    | 'lte_quota'
+    | 'traffic_limit_gb'
+    | 'requires_tariff_selection'
+  >,
+): boolean {
+  return (
+    (subscription.is_active || subscription.is_limited) &&
+    !subscription.is_trial &&
+    !needsTariff(subscription) &&
+    ((!networkCategory(subscription.network_category) && subscription.device_limit !== 0) ||
+      canBuyTraffic(subscription))
+  );
 }
