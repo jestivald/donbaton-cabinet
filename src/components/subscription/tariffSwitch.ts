@@ -103,7 +103,17 @@ export interface TariffSwitchSummary {
   totalDays: number;
   devicesFrom: number;
   devicesTo: number;
-  /** Панель сбрасывает привязки только при уменьшении лимита устройств. */
+  /**
+   * До этой даты действуют прежние оплаченные условия (перенесённые
+   * индивидуальные): лимит устройств не уменьшается — больший из прежнего и
+   * нового, уменьшение наступает только после неё. `null` — окна нет.
+   */
+  devicesKeptUntil: Date | null;
+  /**
+   * Бэкенд сбрасывает привязки, только если у нового тарифа лимит устройств
+   * меньше, чем у текущего ТАРИФА (не подписки), и никогда в окне прежних
+   * условий (`should_reset_devices_on_switch` + `legacy_terms_keep_devices`).
+   */
   devicesReset: boolean;
   /** Новый тариф дешевле текущего — разницу за остаток никто не вернёт. */
   cheaper: boolean;
@@ -169,6 +179,17 @@ export function describeTariffSwitch({
     legacyUntil !== null &&
     Number.isFinite(legacyUntil.getTime()) &&
     legacyUntil.getTime() > now.getTime();
+  // Окно прежних условий для устройств — по самой дате, без оглядки на режим
+  // LTE-периода: бэкенд держит лимит, пока legacy_state не истёк.
+  const keptRaw = quota?.legacy_compatibility_until ?? null;
+  const keptUntil = keptRaw ? new Date(keptRaw) : null;
+  const devicesKeptUntil =
+    keptUntil !== null &&
+    Number.isFinite(keptUntil.getTime()) &&
+    keptUntil.getTime() > now.getTime()
+      ? keptUntil
+      : null;
+  const tariffDevicesFrom = currentTariff?.device_limit ?? devicesFrom;
 
   const currentRate = currentTariff ? dailyRateKopeks(currentTariff, period) : null;
   const newRate = dailyRateKopeks(tariff, period);
@@ -179,7 +200,9 @@ export function describeTariffSwitch({
     totalDays: remainingDays + period,
     devicesFrom,
     devicesTo,
-    devicesReset: deviceCapacity(devicesTo) < deviceCapacity(devicesFrom),
+    devicesKeptUntil,
+    devicesReset:
+      devicesKeptUntil === null && deviceCapacity(devicesTo) < deviceCapacity(tariffDevicesFrom),
     cheaper: currentRate !== null && newRate !== null && newRate < currentRate,
     lte: {
       mode: to === 'wifi' ? 'none' : legacyActive ? 'after_legacy' : 'immediate',

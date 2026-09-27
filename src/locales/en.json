@@ -656,6 +656,7 @@
       "noticeTitle": "Moving to another plan",
       "carryOver": "The remaining {{remaining}} days of your current plan are kept — new term: {{remaining}} + {{period}} = {{total}} days.",
       "devicesNow": "Devices: {{from}} → {{to}} (immediately)",
+      "devicesAfterLegacy": "Devices: {{from}} until {{date}}, then {{to}} — connected devices are not reset; new ones can be added only within {{to}}",
       "lteImmediate": "LTE allowance: {{gb}} GiB immediately",
       "lteAfterLegacy": "Your previous LTE allowance stays valid until {{date}}, then {{gb}} GiB every {{days}} days.",
       "lteNone": "The new plan has no LTE allowance",

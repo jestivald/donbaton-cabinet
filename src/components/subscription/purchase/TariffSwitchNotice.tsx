@@ -9,9 +9,10 @@ import { describeTariffSwitch } from '../tariffSwitch';
 // Что произойдёт при покупке другого сетевого тарифа поверх живой
 // подписки. Цена на экране остаётся обычной ценой периода — блок
 // объясняет ровно то, чего в ней не видно: остаток текущего тарифа не
-// сгорает, устройства и категория меняются сразу, новый объём LTE ждёт
-// конца прежних оплаченных условий, а разницу при удешевлении никто не
-// возвращает.
+// сгорает, устройства и категория меняются сразу (в окне прежних условий
+// лимит устройств уменьшается только после их окончания, без сброса), новый
+// объём LTE ждёт конца прежних оплаченных условий, а разницу при удешевлении
+// никто не возвращает.
 // ──────────────────────────────────────────────────────────────────
 
 export interface TariffSwitchNoticeProps {
@@ -50,12 +51,24 @@ export function TariffSwitchNotice({
       }),
     );
   }
-  lines.push(
-    t('subscription.switchTariff.devicesNow', {
-      from: devices(summary.devicesFrom),
-      to: devices(summary.devicesTo),
-    }),
-  );
+  const capacity = (limit: number) => (limit > 0 ? limit : Number.POSITIVE_INFINITY);
+  if (summary.devicesKeptUntil && capacity(summary.devicesTo) < capacity(summary.devicesFrom)) {
+    // Окно прежних условий: до даты лимит не уменьшается, устройства не сбрасываются.
+    lines.push(
+      t('subscription.switchTariff.devicesAfterLegacy', {
+        from: devices(summary.devicesFrom),
+        to: devices(summary.devicesTo),
+        date: summary.devicesKeptUntil.toLocaleDateString(uiLocale()),
+      }),
+    );
+  } else {
+    lines.push(
+      t('subscription.switchTariff.devicesNow', {
+        from: devices(summary.devicesFrom),
+        to: devices(summary.devicesTo),
+      }),
+    );
+  }
   if (summary.lte.mode === 'none') {
     lines.push(t('subscription.switchTariff.lteNone'));
   } else if (summary.lte.gb != null) {

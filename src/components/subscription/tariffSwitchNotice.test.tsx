@@ -186,6 +186,79 @@ describe('покупка другого сетевого тарифа = смен
     expect(screen.getByText(text('lteImmediate', { gb: 60 }))).toBeTruthy();
   });
 
+  it('в окне прежних условий не обещает сброс и уменьшает лимит только после даты', () => {
+    // Перенесённые 8 устройств на техническом «Везде 120», покупка «Везде 60» (3).
+    form(
+      cheap,
+      subscriptionOn(rich, {
+        device_limit: 8,
+        lte_quota: {
+          period_mode: 'legacy_calendar',
+          legacy_compatibility_until: '2099-03-05T12:00:00Z',
+        },
+      } as Partial<Subscription>),
+      rich,
+    );
+    expect(
+      screen.getByText(text('devicesAfterLegacy', { from: '8', to: '3', date: '05.03.2099' })),
+    ).toBeTruthy();
+    expect(screen.queryByText(text('devicesNow', { from: '8', to: '3' }))).toBeNull();
+    expect(screen.queryByText(text('devicesReset'))).toBeNull();
+  });
+
+  it('окно прежних условий по дате, даже если LTE-период уже обычный', () => {
+    form(
+      cheap,
+      subscriptionOn(rich, {
+        lte_quota: {
+          period_mode: 'rolling_30_days',
+          legacy_compatibility_until: '2099-03-05T12:00:00Z',
+        },
+      } as Partial<Subscription>),
+      rich,
+    );
+    expect(screen.queryByText(text('devicesReset'))).toBeNull();
+    expect(
+      screen.getByText(text('devicesAfterLegacy', { from: '5', to: '3', date: '05.03.2099' })),
+    ).toBeTruthy();
+  });
+
+  it('после окна сброс — только когда лимит нового тарифа меньше лимита текущего тарифа', () => {
+    // Лимит подписки 8 больше лимита обоих тарифов (5 → 5): бэкенд сравнивает тарифы, сброса нет.
+    const same = plan({
+      id: 11,
+      name: 'Везде 120 Wi-Fi',
+      device_limit: 5,
+      network_category: 'wifi',
+    });
+    form(
+      same,
+      subscriptionOn(rich, {
+        device_limit: 8,
+        lte_quota: {
+          period_mode: 'rolling_30_days',
+          legacy_compatibility_until: '2020-01-01T12:00:00Z',
+        },
+      } as Partial<Subscription>),
+      rich,
+    );
+    expect(screen.queryByText(text('devicesReset'))).toBeNull();
+    cleanup();
+    form(
+      cheap,
+      subscriptionOn(rich, {
+        device_limit: 8,
+        lte_quota: {
+          period_mode: 'rolling_30_days',
+          legacy_compatibility_until: '2020-01-01T12:00:00Z',
+        },
+      } as Partial<Subscription>),
+      rich,
+    );
+    expect(screen.getByText(text('devicesReset'))).toBeTruthy();
+    expect(screen.getByText(text('devicesNow', { from: '8', to: '3' }))).toBeTruthy();
+  });
+
   it('у тарифа без LTE не обещает пакет', () => {
     form(wifiOnly, subscriptionOn(rich), rich);
     expect(screen.getByText(text('lteNone'))).toBeTruthy();
