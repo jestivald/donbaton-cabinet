@@ -13,7 +13,7 @@ import {
 } from '../api/tariffs';
 import { AdminBackButton } from '../components/admin';
 import { createNumberInputHandler, toNumber } from '../utils/inputHelpers';
-import Twemoji from 'react-twemoji';
+import Twemoji from '@/lib/twemoji';
 import type { NetworkCategory } from '../types';
 import { getErrorMessage } from '../utils/subscriptionHelpers';
 import { PageSkeleton, Skeleton } from '@/components/ui/skeleton';

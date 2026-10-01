@@ -30,7 +30,7 @@ vi.mock('../../utils/uiLocale', () => ({ uiLocale: () => 'ru-RU' }));
 vi.mock('../../platform', () => ({ usePlatform: () => ({ platform: 'web', openLink: () => {} }) }));
 
 const i18n = createInstance();
-await i18n.init({ lng: 'ru', resources: { ru: { translation: ru } }, initImmediate: false });
+await i18n.init({ lng: 'ru', resources: { ru: { translation: ru } }, initAsync: false });
 const text = (key: string, options: Record<string, string | number> = {}) =>
   i18n.t(`subscription.switchTariff.${key}`, options) as string;
 

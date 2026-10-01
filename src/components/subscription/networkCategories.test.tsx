@@ -28,7 +28,7 @@ vi.mock('../../utils/uiLocale', () => ({ uiLocale: () => 'ru-RU' }));
 vi.mock('../../platform', () => ({ usePlatform: () => ({ platform: 'web', openLink: () => {} }) }));
 
 const i18n = createInstance();
-await i18n.init({ lng: 'ru', resources: { ru: { translation: ru } }, initImmediate: false });
+await i18n.init({ lng: 'ru', resources: { ru: { translation: ru } }, initAsync: false });
 
 afterEach(cleanup);
 

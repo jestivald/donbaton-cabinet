@@ -26,7 +26,7 @@ vi.mock('../../../api/subscription', () => ({
 }));
 
 const i18n = createInstance();
-await i18n.init({ lng: 'ru', resources: { ru: { translation: ru } }, initImmediate: false });
+await i18n.init({ lng: 'ru', resources: { ru: { translation: ru } }, initAsync: false });
 
 const target = { id: 10, name: 'Везде 120', network_category: 'wifi_lte' } as Tariff;
 

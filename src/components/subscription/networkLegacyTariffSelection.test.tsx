@@ -27,7 +27,7 @@ vi.mock('../../hooks/usePromoDiscount', () => ({
 vi.mock('../../utils/uiLocale', () => ({ uiLocale: () => 'ru-RU' }));
 
 const i18n = createInstance();
-await i18n.init({ lng: 'ru', resources: { ru: { translation: ru } }, initImmediate: false });
+await i18n.init({ lng: 'ru', resources: { ru: { translation: ru } }, initAsync: false });
 
 afterEach(cleanup);
 
