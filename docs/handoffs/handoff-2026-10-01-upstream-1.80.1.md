@@ -7,11 +7,15 @@
 **Ветка:** `codex/upstream-1.80.1`
 
 ```
-c32f9eaf Merge upstream bedolaga-cabinet v1.80.1 into codex/upstream-1.80.1   ← код релиза, собирать из него
+8c737a56 test(donbaton): заглушка scrollIntoView в тесте страховки смены тарифа   ← собирать из него
+d3f68a32 fix(security): safe redirect отсекает управляющие символы и обратный слэш  ← F1, раздел 3а
+c32f9eaf Merge upstream bedolaga-cabinet v1.80.1 into codex/upstream-1.80.1
 06dfe9b1 ← база: codex/legacy-window-devices (боевой кабинет)
 ```
 
-Вершина ветки = `c32f9eaf` плюс этот документ; `.dockerignore` исключает `docs/`, на образ документ не влияет.
+Вершина ветки = `8c737a56` плюс коммиты этого документа; `.dockerignore` исключает `docs/`, на образ документ не
+влияет. `8c737a56` меняет только тест — `dist` тот же, что у `d3f68a32`; собирать из него, потому что
+`stage-cabinet` сверяет дерево вне `docs/` с коммитом.
 **База:** `06dfe9b1` = боевой образ `donbaton/cabinet:u1790-06dfe9b1-20260927` (бандл `index-CvYO--RI.js`,
 сборка базовой линии этого сеанса дала то же имя — сборка воспроизводима). Боевой бот —
 `donbaton/bedolaga:u4150-d394b293-20260928` (апстрим 4.15.0 + форк).
@@ -33,9 +37,12 @@ c32f9eaf Merge upstream bedolaga-cabinet v1.80.1 into codex/upstream-1.80.1   �
   `npm run build`, падал). Раздел 3.
 * **npm audit: 36 → 0** (было: high — `@tiptap/core` prototype pollution + ReDoS, `axios`, `undici`; 32 moderate,
   1 low). Зависимости = апстрим v1.80.1 побайтно. Раздел 7.
-* **Проверки зелёные:** biome 0 ошибок, tsc чисто, **vitest 253 файла / 1560 тестов** (с `--testTimeout=30000`;
-  с умолчанием 5 с на нагруженном маке падают 2–5 апстримных тестов по времени — так же и в чистом v1.80.1),
-  сборка ок, бандл **`index-DmC-pfK-.js`**; чистая копия коммита дала побайтно тот же `dist`. Раздел 7.
+* **F1 из аудита кабинета закрыт** (`d3f68a32`): `getSafeRedirectPath` отсекает управляющие символы и `\`
+  (open redirect через `/tg?redirect=/%09/evil.example/`). Раздел 3а.
+* **Проверки зелёные:** biome 0 ошибок, tsc чисто, **vitest 254 файла / 1566 тестов**, код выхода 0 (с
+  `--testTimeout=30000`; с умолчанием 5 с на нагруженном маке падают 2–5 апстримных тестов по времени — так же
+  и в чистом v1.80.1), сборка ок, бандл **`index-B_2Tqjlr.js`**; чистая копия коммита дала побайтно тот же
+  `dist`. Раздел 7.
 * **Способ выкладки (`FROM <u1770> + COPY dist/`) годен без изменений по сути:** Dockerfile, `nginx.conf`,
   `.dockerignore`, `public/`, runtime-конфиг с базового образа u1770 не менялись. В `stage-cabinet.sh` нужно
   поменять пути и **таймаут vitest**. Раздел 4.
@@ -165,6 +172,48 @@ legacy_compatibility_until                          6 →  6
 
 ---
 
+## 3а. F1 — open redirect в `getSafeRedirectPath` (`d3f68a32`)
+
+Находка F1 аудита кабинета 01.10.2026 (`local-ops/_claude/tools/donbaton-u500-20261001/security/cabinet-code.md`),
+код апстрима, в 1.80.1 не менялся.
+
+* **Было.** Проверка отсекала только `//` в начале, `://` и их закодированные формы. `?redirect=/%09/evil.example/`
+  на `/tg` и `/auth/telegram` давал путь `/\t/evil.example/`: парсер URL браузера вырезает TAB/LF/CR и читает `\`
+  как `/`, получается `//evil.example` — чужой origin; `history.pushState` бросает `SecurityError`, и `push()`
+  react-router уходит в `window.location.assign()` — полный переход на чужой сайт.
+* **Стало** (`src/utils/safeRedirect.ts`): C0-управляющие (U+0000–U+001F), DEL и `\` отсекаются в сыром и
+  декодированном виде — посимвольно (регэксп из предложения аудита ловит правило biome
+  `noControlCharactersInRegex`, 2 ошибки); итог сверяет сам парсер: `new URL(url, origin)` обязан остаться на
+  том же origin, возвращается `pathname + search + hash`. origin — `window.location.origin`, вне браузера
+  (vitest в окружении `node`, где `window` нет) — условный `https://cabinet.invalid`: для проверки «тот же
+  origin» у относительного пути база не важна.
+* **Обычные пути не меняются:** `/profile`, `/subscription?x=1#y`, `/sub/page?tab=devices&x=1`. Побочно путь
+  нормализуется парсером (`/a/../b` → `/b`, кириллица и пробелы — в процент-кодировке) — для навигации это то же.
+* **Места вызова** (grep): `TelegramRedirect.tsx:57` (`redirect`, `navigate` = push — сам сценарий атаки) и
+  `TopUpAmount.tsx:113` (`returnTo`, replace — без запасного `location.assign`, было бы только исключение);
+  `TopUpMethodSelect.tsx:27` и `TopUpAmount.tsx:161` лишь пробрасывают `returnTo` дальше. `Login.getReturnUrl`
+  берёт путь из `location.state` и sessionStorage (собственный `pathname + search` вкладки), не из query.
+  `redirect.html` / `DeepLinkRedirect` (F4) — вне этого коммита, бэклог.
+* **Тесты:** `src/utils/safeRedirect.test.ts` (+4 сценария к 6 апстримным): `/\t/evil.example`, `/\n/evil`,
+  `/\r/evil`, `/\\evil`, `/\\\t\\evil`, `/profile\\..\\evil`, те же символы в середине пути и в query,
+  NUL / VT / DEL, `/%09/`, `/%0A/`, `/%0D/`, `/%7F/`, `/%5Cevil`, `/%5C%09%5Cevil`, `//evil`, `https://evil`,
+  `/%2F%2Fevil`, `javascript:`, пути с query и hash, `null`/`undefined`/`''` → `/`; плюс
+  `src/utils/safeRedirect.browser.test.ts` (jsdom, ветка с настоящим `window.location.origin`). **Мутация:** со
+  старой реализацией падают 4 из 12, без проверки декодированной формы — 1, без посимвольной — 3.
+* Апстриму стоит сообщить (рекомендация аудита).
+
+### Попутно: флак теста форка (`8c737a56`)
+
+Полный прогон после F1 завершился кодом 1 при 1566/1566 зелёных: необработанная ошибка
+`ref.current?.scrollIntoView is not a function`. `SwitchTariffSheet` зовёт `scrollIntoView` по таймеру через
+100 мс после открытия, jsdom его не умеет; тест форка `sheets/switchTariffPurchaseFallback.test.tsx` держит
+панель открытой, и если он длится дольше 100 мс (нагруженная машина), таймер падает. `stage-cabinet.sh` на
+таком прогоне остановился бы на `exit 3`. Исправлено заглушкой `Element.prototype.scrollIntoView` в этом тесте
+(код кабинета не менялся); воспроизведено задержкой теста на 150 мс: без заглушки — `Unhandled Errors 1`, с ней —
+чисто.
+
+---
+
 ## 4. Сборка и образ — что поменять в нашем способе
 
 Наш способ: `stage-cabinet.sh` собирает `dist` на маке, контекст `FROM donbaton/cabinet:u1770-0a861967-20260917`
@@ -178,12 +227,13 @@ legacy_compatibility_until                          6 →  6
   `--lightningcss-light/dark`, смысл тот же), **modulepreload 10 → 26** (Rolldown режет общий код на мелкие
   чанки, появился `rolldown-runtime-*.js`); плейсхолдеров не осталось, `manifest`/`favicon` — те же адреса бота.
   Все чанки — под `/assets/` (хостовый `location ^~ /assets/` → кабинет).
-* **Бандл:** `assets/index-DmC-pfK-.js` — 379.01 kB (gzip 97.51; было `index-CvYO--RI.js` 485.57 / 129.11).
+* **Бандл:** `assets/index-B_2Tqjlr.js` — 379.33 kB (gzip 97.67; было `index-CvYO--RI.js` 485.57 / 129.11; у
+  слияния без F1 — `index-DmC-pfK-.js`).
   Стартовая загрузка (entry + modulepreload + css): **410.2 → 401.8 kB gzip**, 11 → 27 файлов. `dist`: 237 → 255
   файлов, 6.19 → 6.39 МБ. Имя бандла зависит только от содержимого (собрано дважды — одно имя).
 * **Node:** `engines` `>=24.15.0`, `.nvmrc` 24, Vite 8 требует `^20.19 || >=22.12`; на маке v26.10.0 — годится.
   Dockerfile апстрима (`node:24-alpine`, `build:docker` без `tsc`) нашим способом не используется.
-* **Правки `stage-cabinet.sh`** (готовая копия — `stage-cabinet-u1801.sh` в scratchpad сессии оркестратора,
+* **Правки `stage-cabinet.sh`** (готовая копия — `local-ops/_claude/tools/donbaton-u500-20261001/stage-cabinet-u1801.sh`,
   **не запускалась**):
   1. `REPO=/Users/admin/Documents/work/_worktrees/donbaton-cabinet/upstream-1.80.1`, суффикс по умолчанию
      `u1801`, `OUT` — scratchpad текущей сессии (в прежней копии зашит путь сессии 25.09);
@@ -192,11 +242,11 @@ legacy_compatibility_until                          6 →  6
      то же (3 падения по таймауту); с 30 с зелено и там, и здесь;
   3. `scp`/`ssh` — с `ControlMaster=auto` и тем же `ControlPath`, как `dbcore_ssh_cm.sh` (в прежней копии
      только `ControlPath`: без живого мастера это новое прямое подключение);
-  4. запуск: `bash stage-cabinet-u1801.sh c32f9eaf u1801`; проверка «вне `docs/` дерево = коммит» пройдёт
-     (HEAD = `c32f9eaf` + этот документ).
-* На ядре: `TAG=donbaton/cabinet:u1801-c32f9eaf-<YYYYMMDD> BASE=donbaton/cabinet:u1770-0a861967-20260917
+  4. запуск: `bash stage-cabinet-u1801.sh` (коммит по умолчанию `8c737a56`, суффикс `u1801`); проверка «вне
+     `docs/` дерево = коммит» пройдёт (HEAD = `8c737a56` + коммиты этого документа).
+* На ядре: `TAG=donbaton/cabinet:u1801-8c737a56-<YYYYMMDD> BASE=donbaton/cabinet:u1770-0a861967-20260917
   CTX=cabinet-ctx-u1801 bash cabinet-build-v2.sh`, затем `cabinet-deploy-v2.sh` с
-  `OLD=donbaton/cabinet:u1790-06dfe9b1-20260927 NEWBUNDLE=index-DmC-pfK-.js` (или по образцу
+  `OLD=donbaton/cabinet:u1790-06dfe9b1-20260927 NEWBUNDLE=index-B_2Tqjlr.js` (или по образцу
   `donbaton-u4150pay-20260927/deploy-cabinet.sh`, старый бандл `index-CvYO--RI.js`).
 
 ---
@@ -264,23 +314,27 @@ legacy_compatibility_until                          6 →  6
 ## 7. Проверки
 
 Node v26.10.0 / npm (из brew). Базовая линия — в отдельной копии `git archive 06dfe9b1` в scratchpad; итог —
-в worktree и повторно в чистой копии `git archive c32f9eaf`.
+в worktree и повторно в чистых копиях `git archive c32f9eaf` и `git archive 8c737a56`.
 
 | Точка | biome lint / check | tsc --noEmit | vitest | build | npm audit (prod / все) |
 | --- | --- | --- | --- | --- | --- |
 | База `06dfe9b1` | 0 ошибок, 232 warn, 100 info (981 файл) | чисто | 230 файлов / 1435 тестов | ок, 3090 модулей, 237 файлов, `index-CvYO--RI.js` | **35 / 36**: high 2 / 3 (`@tiptap/core`, `axios`; + `undici` в dev), moderate 32, low 1 |
 | Чистый апстрим `v1.80.1` | — | — | 243 / 1495 (с 30 с); с 5 с — 3 падения по времени | — | — |
-| **HEAD `c32f9eaf`** | **0 ошибок, 231 warn, 96 info** (1036 файлов) | **чисто** | **253 / 1560, все зелёные** (с `--testTimeout=30000`); с 5 с — 2–5 падений по времени (см. ниже) | **ок, 3092 модуля, 255 файлов, `index-DmC-pfK-.js`** | **0 / 0** (434 пакета) |
+| Слияние `c32f9eaf` | 0 ошибок, 231 warn, 96 info (1036 файлов) | чисто | 253 / 1560 (с 30 с); с 5 с — 2–5 падений по времени | ок, 3092 модуля, 255 файлов, `index-DmC-pfK-.js` | 0 / 0 (434 пакета) |
+| **HEAD `8c737a56`** (+F1, +флак) | **0 ошибок, 231 warn, 96 info** (1037 файлов) | **чисто** | **254 / 1566, код выхода 0** (с `--testTimeout=30000`) | **ок, 3092 модуля, 255 файлов, `index-B_2Tqjlr.js`** | **0** |
 
-* Тесты: 1560 = 1495 чистого v1.80.1 + 65 на стороне форка (10 файлов только форка, из них 2 новых с 6
-  тестами, плюс правки форка в двух апстримных файлах `bestValue*`); 253 файла = 243 + 10.
+* Тесты слияния: 1560 = 1495 чистого v1.80.1 + 65 на стороне форка (10 файлов только форка, из них 2 новых с 6
+  тестами, плюс правки форка в двух апстримных файлах `bestValue*`); 253 файла = 243 + 10. F1 добавил 6 тестов
+  (4 в `safeRedirect.test.ts`, 2 в новом `safeRedirect.browser.test.ts`): 1566 / 254.
 * Падения с умолчанием 5 с — только в апстримных файлах, которые форк не трогал (побайтно = v1.80.1), и
   зависят от нагрузки машины (параллельно шли другие сборки/тесты): в worktree дважды по 2, в чистой копии 5 —
   таймауты `adminBroadcastCreate` (второй его тест — следствие первого: не размонтированный рендер даёт «Found
   multiple elements»), `loadingStates` (AdminPromocodeCreate), `reachability/fleet/FleetList` и ожидание 50 мс в
   `recurringFeatureProbing` («страница сохранённых карт»). По отдельности все четыре файла — 59/59 трижды подряд.
 * Контрольный прогон в чистой копии `git archive c32f9eaf` (своя `npm ci`): biome, tsc, vitest с 30 с
-  (253 / 1560), сборка, audit 0 / 0 — то же; **`dist` побайтно совпал с собранным в worktree**.
+  (253 / 1560), сборка, audit 0 / 0 — то же; **`dist` побайтно совпал с собранным в worktree**. Для
+  `8c737a56` — чистая копия, своя `npm ci` и `npm run build` (`tsc && vite build`): `dist` (255 файлов) побайтно
+  совпал с собранным в worktree.
 * Коммит слияния прошёл pre-commit (`lint-staged` → `biome check --write`) без изменений: дерево коммита
   `be379349` = проверенному индексу.
 
@@ -306,11 +360,11 @@ Node v26.10.0 / npm (из brew). Базовая линия — в отдельн
 1. Запушить `codex/upstream-1.80.1` в `origin` — сразу после выкладки (правило: боевой образ — из запушенной
    ветки).
 2. **Предпроверка (чтение, на ядре):** `lite-mode` → `{"enabled":false}` (как в handoff 1.79.0, п. 9.2).
-3. **Контекст с мака:** `bash stage-cabinet-u1801.sh c32f9eaf u1801` (раздел 4). 🔴 SSH/scp к ядру — только
+3. **Контекст с мака:** `bash stage-cabinet-u1801.sh` (раздел 4; коммит по умолчанию `8c737a56`). 🔴 SSH/scp к ядру — только
    общим сокетом `cm-dbcore`.
 4. **На ядре:** `cabinet-build-v2.sh` → `cabinet-deploy-v2.sh` (раздел 4).
 5. **Приёмка** (как `accept-cabinet-u1770.sh`, плюс):
-   * `index.html` → `assets/index-DmC-pfK-.js`, есть `rolldown-runtime-*.js`, `manifest` →
+   * `index.html` → `assets/index-B_2Tqjlr.js`, есть `rolldown-runtime-*.js`, `manifest` →
      `/api/cabinet/branding/manifest.webmanifest`; старый `index-CvYO--RI.js` → 404 (в образе его нет — база u1770);
    * `GET /api/cabinet/subscription/cashera-recurrent` и `GET /api/cabinet/admin/dpichecker/status` без токена
      → 401/403, **не 404** (значит, бот 5.0 и маршруты на месте);
@@ -326,7 +380,7 @@ Node v26.10.0 / npm (из brew). Базовая линия — в отдельн
 Кабинет — статика, миграций нет:
 
 ```bash
-sed -i 's#image: donbaton/cabinet:u1801-c32f9eaf-<YYYYMMDD>#image: donbaton/cabinet:u1790-06dfe9b1-20260927#' /opt/bedolaga/docker-compose.yml
+sed -i 's#image: donbaton/cabinet:u1801-8c737a56-<YYYYMMDD>#image: donbaton/cabinet:u1790-06dfe9b1-20260927#' /opt/bedolaga/docker-compose.yml
 docker compose -f /opt/bedolaga/docker-compose.yml up -d --no-deps --no-build --pull never cabinet
 ```
 
@@ -338,7 +392,9 @@ docker compose -f /opt/bedolaga/docker-compose.yml up -d --no-deps --no-build --
 ## 10. Что не проверено
 
 * **Образ не собирался, ничего не выкладывалось;** Docker на маке нет, серверы вне задачи.
-* **Живой браузер:** продакшен-сборка Vite 8 глазами не открывалась (риск 8.4).
+* **Живой браузер:** продакшен-сборка Vite 8 глазами не открывалась (риск 8.4). F1 после правки в браузере не
+  воспроизводился: эксплуатацию до правки аудит подтвердил в headless Chrome, правка проверена тестами (node и
+  jsdom) и парсером URL Node.
 * **Совместимость — с апстримными тегами бота**, не с нашим слиянием 5.0.0; повторить сверку путей после него.
 * **Бэкенд-гейт Cashera для сетевых подписок** в боте не проверялся (вне задачи; раздел 5).
 * **Хостовый nginx** — по локальной копии сниппета от 10.09 (`^~ /api/` с `proxy_read_timeout 300s` ≥
