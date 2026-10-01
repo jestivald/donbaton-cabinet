@@ -5,7 +5,7 @@ import { AxiosError } from 'axios';
 import { createInstance } from 'i18next';
 import { I18nextProvider } from 'react-i18next';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ru from '../../../locales/ru.json';
 import type { Tariff } from '../../../types';
 import { SwitchTariffSheet } from './SwitchTariffSheet';
@@ -58,6 +58,13 @@ function sheet(onExpiredFallback = vi.fn(), onClose = vi.fn()) {
   );
   return { onExpiredFallback, onClose };
 }
+
+// jsdom не умеет scrollIntoView, а открытая панель зовёт его по таймеру через
+// 100 мс: если тест живёт дольше (нагруженная машина), таймер падает
+// необработанной ошибкой, и vitest завершается с кодом 1 при зелёных тестах.
+beforeAll(() => {
+  Element.prototype.scrollIntoView = vi.fn();
+});
 
 // Тело в скобках обязательно: mockReset() возвращает сам мок, а vitest
 // принимает возвращённую из beforeEach функцию за teardown и вызывает её
