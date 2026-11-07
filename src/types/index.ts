@@ -729,6 +729,7 @@ export interface Ticket {
 
 export interface TicketDetail extends Omit<Ticket, 'messages_count' | 'last_message'> {
   is_reply_blocked: boolean;
+  can_close: boolean;
   messages: TicketMessage[];
 }
 

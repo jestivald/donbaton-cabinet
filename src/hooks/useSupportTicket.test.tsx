@@ -30,6 +30,7 @@ const ticket: TicketDetail = {
   updated_at: message.created_at,
   closed_at: null,
   is_reply_blocked: false,
+  can_close: true,
   messages: [message],
 };
 

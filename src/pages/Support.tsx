@@ -52,7 +52,7 @@ export default function Support() {
   const { t } = useTranslation();
   const isAdmin = useAuthStore((state) => state.isAdmin);
   const queryClient = useQueryClient();
-  const { openTelegramLink, openLink } = usePlatform();
+  const { openTelegramLink, openLink, dialog } = usePlatform();
 
   const openSupportContact = useCallback(
     (config: SupportConfig) => {
@@ -75,6 +75,8 @@ export default function Support() {
   // открытый тикет», 403 «поддержка выключена/пользователь заблокирован» и т.п.).
   // Формы create и reply взаимоисключающие, поэтому состояние одно на обе.
   const [formError, setFormError] = useState<string | null>(null);
+  const [closeError, setCloseError] = useState<string | null>(null);
+  const [isConfirmingClose, setIsConfirmingClose] = useState(false);
 
   // Media attachment states (multi-upload, up to 10)
   const [createAttachments, setCreateAttachments] = useState<MediaAttachment[]>([]);
@@ -120,6 +122,7 @@ export default function Support() {
   });
 
   const { data: ticketDetail, isLoading: detailLoading } = useSupportTicket(selectedTicket?.id);
+  const isTicketClosed = (ticketDetail?.status ?? selectedTicket?.status) === 'closed';
 
   // Handle file selection (multi-upload)
   const handleFileSelect = async (
@@ -219,6 +222,26 @@ export default function Support() {
       // (тикет уже закрыт) выглядели как «кнопка не работает».
       log.error('Ticket reply failed', error);
       setFormError(getLocalizedApiErrorMessage(error, t('support.errors.replyFailed'), t));
+    },
+  });
+
+  const closeMutation = useMutation({
+    mutationFn: (ticketId: number) => ticketsApi.closeTicket(ticketId),
+    onSuccess: async (ticket, ticketId) => {
+      // An older in-flight GET must not restore the reply form after closing.
+      await queryClient.cancelQueries({ queryKey: ['ticket', ticketId] });
+      queryClient.setQueryData(['ticket', ticketId], ticket);
+      queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      setSelectedTicket((current) => (current?.id === ticketId ? ticket : current));
+      if (selectedTicket?.id === ticketId) {
+        setCloseError(null);
+        setFormError(null);
+        setReplyMessage('');
+        clearReplyAttachments();
+      }
+    },
+    onError: (error) => {
+      setCloseError(getLocalizedApiErrorMessage(error, t('support.errors.closeFailed'), t));
     },
   });
 
@@ -363,6 +386,7 @@ export default function Support() {
             setShowCreateForm(true);
             setSelectedTicket(null);
             setFormError(null);
+            setCloseError(null);
             clearCreateAttachments();
           }}
         >
@@ -421,6 +445,7 @@ export default function Support() {
                     setSelectedTicket(ticket as unknown as TicketDetail);
                     setShowCreateForm(false);
                     setFormError(null);
+                    setCloseError(null);
                     clearReplyAttachments();
                   }}
                   className={`w-full rounded-bento border p-4 text-left transition-all ${
@@ -588,7 +613,37 @@ export default function Support() {
                     </span>
                   </div>
                 </div>
+                {ticketDetail?.can_close && ['open', 'answered'].includes(ticketDetail.status) && (
+                  <Button
+                    variant="secondary"
+                    disabled={replyMutation.isPending || isConfirmingClose}
+                    loading={closeMutation.isPending}
+                    onClick={async () => {
+                      const ticketId = ticketDetail.id;
+                      setCloseError(null);
+                      setIsConfirmingClose(true);
+                      try {
+                        if (await dialog.confirm(t('support.closeConfirm'))) {
+                          closeMutation.mutate(ticketId);
+                        }
+                      } finally {
+                        setIsConfirmingClose(false);
+                      }
+                    }}
+                  >
+                    {t('support.closeTicket')}
+                  </Button>
+                )}
               </div>
+
+              {closeError && (
+                <div
+                  role="alert"
+                  className="mb-4 rounded-lg border border-error-500/30 bg-error-500/10 p-2 text-sm text-error-400"
+                >
+                  {closeError}
+                </div>
+              )}
 
               {/* Messages */}
               {detailLoading ? (
@@ -633,7 +688,7 @@ export default function Support() {
               ) : null}
 
               {/* Reply Form */}
-              {ticketDetail?.status !== 'closed' && !ticketDetail?.is_reply_blocked && (
+              {!isTicketClosed && !ticketDetail?.is_reply_blocked && (
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -703,7 +758,9 @@ export default function Support() {
                         disabled={
                           (!replyMessage.trim() &&
                             replyAttachments.filter((a) => a.fileId).length === 0) ||
-                          replyAttachments.some((a) => a.uploading)
+                          replyAttachments.some((a) => a.uploading) ||
+                          closeMutation.isPending ||
+                          isConfirmingClose
                         }
                         loading={replyMutation.isPending}
                       >

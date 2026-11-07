@@ -1421,6 +1421,8 @@
   },
   "support": {
     "title": "Support",
+    "closeTicket": "Close ticket",
+    "closeConfirm": "Close this ticket? You will no longer be able to reply to it.",
     "newTicket": "New Ticket",
     "yourTickets": "Your Tickets",
     "noTickets": "No tickets yet",
@@ -1464,6 +1466,7 @@
     "create_ticket": "Create ticket",
     "writeButton": "Message",
     "errors": {
+      "closeFailed": "Could not close the ticket. Please try again.",
       "alreadyOpenTicket": "You already have an open ticket. Please continue the conversation there — a new ticket can be created once the current one is closed.",
       "createFailed": "Could not create the ticket. Please try again.",
       "replyFailed": "Could not send the reply. Please try again."

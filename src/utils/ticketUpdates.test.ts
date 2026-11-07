@@ -23,6 +23,7 @@ const ticket: TicketDetail = {
   updated_at: userMessage.created_at,
   closed_at: null,
   is_reply_blocked: false,
+  can_close: true,
   messages: [userMessage],
 };
 

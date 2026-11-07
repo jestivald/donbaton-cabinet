@@ -1371,6 +1371,8 @@
   },
   "support": {
     "title": "支持",
+    "closeTicket": "Close ticket",
+    "closeConfirm": "Close this ticket? You will no longer be able to reply to it.",
     "newTicket": "新工单",
     "yourTickets": "您的工单",
     "noTickets": "暂无工单",
@@ -1412,6 +1414,7 @@
     "create_ticket": "创建工单",
     "writeButton": "发消息",
     "errors": {
+      "closeFailed": "Could not close the ticket. Please try again.",
       "alreadyOpenTicket": "您已有一个未关闭的工单。请在该工单中继续沟通，当前工单关闭后即可创建新工单。",
       "createFailed": "创建工单失败，请重试。",
       "replyFailed": "发送回复失败，请重试。"

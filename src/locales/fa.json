@@ -1414,6 +1414,8 @@
   },
   "support": {
     "title": "پشتیبانی",
+    "closeTicket": "Close ticket",
+    "closeConfirm": "Close this ticket? You will no longer be able to reply to it.",
     "newTicket": "تیکت جدید",
     "yourTickets": "تیکت‌های شما",
     "noTickets": "تیکتی موجود نیست",
@@ -1455,6 +1457,7 @@
     "create_ticket": "ایجاد تیکت",
     "writeButton": "پیام",
     "errors": {
+      "closeFailed": "Could not close the ticket. Please try again.",
       "alreadyOpenTicket": "شما در حال حاضر یک تیکت باز دارید. گفتگو را در همان تیکت ادامه دهید؛ پس از بسته شدن آن می‌توانید تیکت جدید ایجاد کنید.",
       "createFailed": "ایجاد تیکت ناموفق بود. لطفاً دوباره تلاش کنید.",
       "replyFailed": "ارسال پاسخ ناموفق بود. لطفاً دوباره تلاش کنید."
