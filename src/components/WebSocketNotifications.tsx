@@ -12,6 +12,7 @@ import { useToast } from './Toast';
 import { useAuthStore } from '../store/auth';
 import { useCurrency } from '../hooks/useCurrency';
 import { useSuccessNotification } from '../store/successNotification';
+import { invalidateTicketQueries } from '../utils/ticketUpdates';
 
 export default function WebSocketNotifications() {
   const { t } = useTranslation();
@@ -26,8 +27,9 @@ export default function WebSocketNotifications() {
     (message: WSMessage) => {
       const { type } = message;
 
-      // Skip ticket events - they are handled by TicketNotificationBell
+      // Переписку обновляем один раз здесь; уведомления остаются у колокольчика.
       if (type.startsWith('ticket.')) {
+        void invalidateTicketQueries(queryClient, message);
         return;
       }
 

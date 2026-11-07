@@ -20,6 +20,7 @@ import { usePlatform } from '@/platform';
 import { linkifyText } from '../utils/linkify';
 import { resolveSupportContact } from '../utils/supportContact';
 import { Skeleton, SkeletonGroup } from '@/components/ui/skeleton';
+import { useSupportTicket } from '../hooks/useSupportTicket';
 
 const log = logger.createLogger('Support');
 
@@ -106,11 +107,7 @@ export default function Support() {
     enabled: supportConfig?.tickets_enabled === true,
   });
 
-  const { data: ticketDetail, isLoading: detailLoading } = useQuery({
-    queryKey: ['ticket', selectedTicket?.id],
-    queryFn: () => ticketsApi.getTicket(selectedTicket!.id),
-    enabled: !!selectedTicket,
-  });
+  const { data: ticketDetail, isLoading: detailLoading } = useSupportTicket(selectedTicket?.id);
 
   // Handle file selection (multi-upload)
   const handleFileSelect = async (
