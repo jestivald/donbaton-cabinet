@@ -1,5 +1,28 @@
 import apiClient from './client';
 import { getYandexCid } from '../utils/yandexCid';
+
+export interface TariffDeviceQuote {
+  quote_id: string;
+  expires_at: string;
+  purchase_kind: 'new' | 'trial_conversion' | 'paid_renewal' | 'classic_conversion';
+  device_selection: {
+    effective_limit: number;
+    included_limit: number;
+    selectable: boolean;
+    min_limit: number | null;
+    max_limit: number | null;
+    reason: string | null;
+  };
+  tariff_cost_kopeks: number;
+  devices_cost_kopeks: number;
+  traffic_cost_kopeks: number;
+  discount_kopeks: number;
+  total_kopeks: number;
+  next_daily_charge_kopeks?: number | null;
+  recurrent_checkout_pending?: boolean;
+  balance_kopeks: number;
+  missing_kopeks: number;
+}
 import type {
   Subscription,
   SubscriptionStatusResponse,
@@ -39,7 +62,69 @@ const bodyWithSubId = (
   subscriptionId != null ? { params: { subscription_id: subscriptionId } } : {},
 ];
 
+export interface CisPayQuote {
+  quote_id: string;
+  expires_at: string;
+  amount_kopeks: number;
+  period_days: number;
+  device_limit: number;
+  first_payment_required: true;
+}
+export interface CisPayRecurringInfo {
+  status: string;
+  subscription_id?: number;
+  redirect_url?: string | null;
+  reason?: string | null;
+  amount_kopeks?: number;
+  period_days?: number;
+  next_charge_at?: string | null;
+}
+
 export const subscriptionApi = {
+  quoteCisPayRecurring: async (body: {
+    tariff_id: number;
+    period_days: number;
+    device_limit?: number;
+    subscription_id?: number;
+  }): Promise<CisPayQuote> => {
+    const { data } = await apiClient.post('/cabinet/subscription/cispay-recurrent/quote', body);
+    return data;
+  },
+  purchaseCisPayRecurring: async (
+    quote_id: string,
+    checkout_id: string,
+  ): Promise<CisPayRecurringInfo> => {
+    const { data } = await apiClient.post('/cabinet/subscription/cispay-recurrent/purchase', {
+      quote_id,
+      checkout_id,
+    });
+    return data;
+  },
+  getCisPayRecurring: async (
+    subscription_id: number,
+    adminUserId?: number,
+  ): Promise<CisPayRecurringInfo> => {
+    const { data } = await apiClient.get(
+      adminUserId
+        ? `/cabinet/admin/users/${adminUserId}/subscriptions/${subscription_id}/cispay-recurrent`
+        : '/cabinet/subscription/cispay-recurrent',
+      { params: { subscription_id } },
+    );
+    return data;
+  },
+  cancelCisPayRecurring: async (
+    subscription_id: number,
+    adminUserId?: number,
+  ): Promise<CisPayRecurringInfo> => {
+    const { data } = await apiClient.post(
+      adminUserId
+        ? `/cabinet/admin/users/${adminUserId}/subscriptions/${subscription_id}/cispay-recurrent/cancel`
+        : '/cabinet/subscription/cispay-recurrent/cancel',
+      null,
+      { params: { subscription_id } },
+    );
+    return data;
+  },
   // ── Multi-tariff endpoints ──────────────────────────────────────────
 
   getSubscriptions: async (): Promise<SubscriptionsListResponse> => {
@@ -172,6 +257,10 @@ export const subscriptionApi = {
     traffic_limit_gb: number;
     traffic_used_percent: number;
     is_unlimited: boolean;
+    traffic_accounting_mode?: 'legacy' | 'managed';
+    traffic_remaining_gb?: number | null;
+    base_traffic_remaining_gb?: number | null;
+    next_traffic_refresh_at?: string | null;
     lifetime_used_bytes?: number;
     lifetime_used_gb?: number;
     network_category?: NetworkCategory | null;
@@ -401,13 +490,39 @@ export const subscriptionApi = {
    * подтверждение привязки в банке. Для нового тарифа бэкенд создаёт
    * неактивную заготовку, которую активирует первый чардж.
    */
+  previewRecurrentPurchase: async (
+    provider: 'platega' | 'lava' | 'cashera',
+    tariffId: number,
+    subscriptionId?: number,
+    selectedDeviceLimit?: number,
+  ): Promise<{
+    amount_kopeks: number;
+    charge_days: number;
+    interval: string | number;
+    selected_device_limit: number;
+    quote_id: string;
+    checkout_id?: string | null;
+    expires_at: string;
+  }> => {
+    const response = await apiClient.get(
+      `/cabinet/subscription/${provider}-recurrent/purchase-preview`,
+      withSubId(subscriptionId, {
+        tariff_id: tariffId,
+        selected_device_limit: selectedDeviceLimit,
+      }),
+    );
+    return response.data;
+  },
+
   purchaseWithSbpRecurring: async (
     tariffId: number,
+    subscriptionId?: number,
+    selection?: { selected_device_limit: number; quote_id: string; checkout_id: string },
   ): Promise<{ status: string; redirect_url: string | null; subscription_id: number }> => {
     const response = await apiClient.post(
       '/cabinet/subscription/platega-recurrent/purchase',
       {},
-      { params: { tariff_id: tariffId } },
+      withSubId(subscriptionId, { tariff_id: tariffId, ...selection }),
     );
     return response.data;
   },
@@ -446,11 +561,13 @@ export const subscriptionApi = {
    */
   purchaseWithLavaRecurring: async (
     tariffId: number,
+    subscriptionId?: number,
+    selection?: { selected_device_limit: number; quote_id: string; checkout_id: string },
   ): Promise<{ status: string; redirect_url: string | null; subscription_id: number }> => {
     const response = await apiClient.post(
       '/cabinet/subscription/lava-recurrent/purchase',
       {},
-      { params: { tariff_id: tariffId } },
+      withSubId(subscriptionId, { tariff_id: tariffId, ...selection }),
     );
     return response.data;
   },
@@ -486,11 +603,13 @@ export const subscriptionApi = {
   /** Оформление подписки на тариф привязкой Cashera: клиент подтверждает автосписания по ссылке. */
   purchaseWithCasheraRecurring: async (
     tariffId: number,
+    subscriptionId?: number,
+    selection?: { selected_device_limit: number; quote_id: string; checkout_id: string },
   ): Promise<{ status: string; redirect_url: string | null; subscription_id: number }> => {
     const response = await apiClient.post(
       '/cabinet/subscription/cashera-recurrent/purchase',
       {},
-      { params: { tariff_id: tariffId } },
+      withSubId(subscriptionId, { tariff_id: tariffId, ...selection }),
     );
     return response.data;
   },
@@ -546,6 +665,20 @@ export const subscriptionApi = {
     return response.data;
   },
 
+  previewTariffPurchase: async (parameters: {
+    tariff_id: number;
+    period_days: number;
+    traffic_gb?: number;
+    subscription_id?: number;
+    selected_device_limit?: number;
+  }): Promise<TariffDeviceQuote> => {
+    const response = await apiClient.post(
+      '/cabinet/subscription/purchase-tariff/preview',
+      parameters,
+    );
+    return response.data;
+  },
+
   purchaseTariff: async (
     tariffId: number,
     periodDays: number,
@@ -558,20 +691,27 @@ export const subscriptionApi = {
      * this is a fresh purchase from the catalog.
      */
     subscriptionId?: number,
+    checkoutId?: string,
+    devices?: { selected_device_limit: number; quote_id: string },
   ): Promise<{
     success: boolean;
-    message: string;
-    subscription: Subscription;
-    tariff_id: number;
-    tariff_name: string;
-    balance_kopeks: number;
-    balance_label: string;
+    already_processed?: boolean;
+    subscription_id?: number | null;
+    charged_amount?: number;
+    message?: string;
+    subscription?: Subscription;
+    tariff_id?: number;
+    tariff_name?: string;
+    balance_kopeks?: number;
+    balance_label?: string;
   }> => {
     const response = await apiClient.post('/cabinet/subscription/purchase-tariff', {
       tariff_id: tariffId,
       period_days: periodDays,
       traffic_gb: trafficGb,
       subscription_id: subscriptionId,
+      checkout_id: checkoutId,
+      ...devices,
       yandex_cid: getYandexCid() || undefined,
     });
     return response.data;
@@ -729,7 +869,13 @@ export const subscriptionApi = {
 
   // ── Revoke (reissue) ────────────────────────────────────────────────
 
-  revokeSubscription: async (subscriptionId?: number) => {
+  revokeSubscription: async (
+    subscriptionId?: number,
+  ): Promise<{
+    success: boolean;
+    devices_reset?: boolean;
+    cooldown_seconds: number;
+  }> => {
     const response = await apiClient.post(
       '/cabinet/subscription/revoke',
       undefined,
@@ -742,6 +888,7 @@ export const subscriptionApi = {
 
   togglePause: async (
     subscriptionId?: number,
+    paused?: boolean,
   ): Promise<{
     success: boolean;
     message: string;
@@ -752,7 +899,7 @@ export const subscriptionApi = {
     const response = await apiClient.post(
       '/cabinet/subscription/pause',
       undefined,
-      withSubId(subscriptionId),
+      withSubId(subscriptionId, paused === undefined ? undefined : { paused }),
     );
     return response.data;
   },

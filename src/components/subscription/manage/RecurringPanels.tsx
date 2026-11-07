@@ -1,3 +1,6 @@
+import { getLocalizedApiErrorMessage } from '@/utils/api-error-display';
+import { canSetupCisPayTariff } from '@/utils/cispayRecurring';
+import { CisPayRecurringPanel } from './CisPayRecurringPanel';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 
@@ -58,8 +61,8 @@ export function RecurringPanels({ subscription, subscriptionId }: RecurringPanel
   const { formatAmount } = useCurrency();
   const { isDark } = useTheme();
   const g = getGlassColors(isDark);
-  // ДонБатон: у сетевой подписки (Wi-Fi / Wi-Fi + LTE) рекуррентов СБП, Lava
-  // и Cashera нет — ни запроса состояния, ни блока.
+  // ДонБатон: у сетевой подписки (Wi-Fi / Wi-Fi + LTE) рекуррентов СБП, Lava,
+  // Cashera и CisPay нет — ни запроса состояния, ни блока.
   const category = networkCategory(subscription.network_category);
 
   const purchaseOptionsQuery = useQuery({
@@ -113,11 +116,9 @@ export function RecurringPanels({ subscription, subscriptionId }: RecurringPanel
       queryClient.invalidateQueries({ queryKey: ['subscription', subscriptionId] });
     },
     onError: (error: unknown) => {
-      const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data
-        ?.detail;
       showToast({
         type: 'error',
-        title: typeof detail === 'string' ? detail : t('subscription.sbpRecurring.enableError'),
+        title: getLocalizedApiErrorMessage(error, t('subscription.sbpRecurring.enableError'), t),
         message: '',
         duration: 3000,
       });
@@ -137,11 +138,9 @@ export function RecurringPanels({ subscription, subscriptionId }: RecurringPanel
       });
     },
     onError: (error: unknown) => {
-      const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data
-        ?.detail;
       showToast({
         type: 'error',
-        title: typeof detail === 'string' ? detail : t('subscription.sbpRecurring.cancelError'),
+        title: getLocalizedApiErrorMessage(error, t('subscription.sbpRecurring.cancelError'), t),
         message: '',
         duration: 3000,
       });
@@ -190,11 +189,9 @@ export function RecurringPanels({ subscription, subscriptionId }: RecurringPanel
       queryClient.invalidateQueries({ queryKey: ['subscription', subscriptionId] });
     },
     onError: (error: unknown) => {
-      const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data
-        ?.detail;
       showToast({
         type: 'error',
-        title: typeof detail === 'string' ? detail : t('subscription.lavaRecurring.enableError'),
+        title: getLocalizedApiErrorMessage(error, t('subscription.lavaRecurring.enableError'), t),
         message: '',
         duration: 3000,
       });
@@ -214,11 +211,9 @@ export function RecurringPanels({ subscription, subscriptionId }: RecurringPanel
       });
     },
     onError: (error: unknown) => {
-      const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data
-        ?.detail;
       showToast({
         type: 'error',
-        title: typeof detail === 'string' ? detail : t('subscription.lavaRecurring.cancelError'),
+        title: getLocalizedApiErrorMessage(error, t('subscription.lavaRecurring.cancelError'), t),
         message: '',
         duration: 3000,
       });
@@ -267,11 +262,13 @@ export function RecurringPanels({ subscription, subscriptionId }: RecurringPanel
       queryClient.invalidateQueries({ queryKey: ['subscription', subscriptionId] });
     },
     onError: (error: unknown) => {
-      const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data
-        ?.detail;
       showToast({
         type: 'error',
-        title: typeof detail === 'string' ? detail : t('subscription.casheraRecurring.enableError'),
+        title: getLocalizedApiErrorMessage(
+          error,
+          t('subscription.casheraRecurring.enableError'),
+          t,
+        ),
         message: '',
         duration: 3000,
       });
@@ -291,11 +288,13 @@ export function RecurringPanels({ subscription, subscriptionId }: RecurringPanel
       });
     },
     onError: (error: unknown) => {
-      const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data
-        ?.detail;
       showToast({
         type: 'error',
-        title: typeof detail === 'string' ? detail : t('subscription.casheraRecurring.cancelError'),
+        title: getLocalizedApiErrorMessage(
+          error,
+          t('subscription.casheraRecurring.cancelError'),
+          t,
+        ),
         message: '',
         duration: 3000,
       });
@@ -313,6 +312,20 @@ export function RecurringPanels({ subscription, subscriptionId }: RecurringPanel
 
   return (
     <>
+      {!category && (
+        <CisPayRecurringPanel
+          subscriptionId={subscription.id}
+          canSetup={
+            !category &&
+            purchaseOptions?.sales_mode === 'tariffs' &&
+            !!purchaseOptions.cispay_recurrent_enabled &&
+            subscription.status !== 'disabled' &&
+            canSetupCisPayTariff(
+              purchaseOptions.tariffs.find((tariff) => tariff.id === subscription.tariff_id),
+            )
+          }
+        />
+      )}
       {/* ─── SBP Recurring Auto-payment ───
            Sibling of the autopay toggle above, guarded ONLY by
            is_trial + uiState — daily-tariff subscriptions must see

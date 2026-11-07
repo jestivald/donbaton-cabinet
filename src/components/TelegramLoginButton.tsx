@@ -1,3 +1,4 @@
+import { getLocalizedApiErrorMessage } from '../utils/api-error-display';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
@@ -10,7 +11,7 @@ import { useNavigate } from 'react-router';
 import { getPendingCampaignSlug } from '../utils/campaign';
 import { getPendingReferralCode } from '../utils/referral';
 import { copyToClipboard } from '../utils/clipboard';
-import { getApiErrorMessage, isEndpointMissingError } from '../utils/api-error';
+import { isEndpointMissingError } from '../utils/api-error';
 import { useLegalConsentGate } from '../hooks/useLegalConsentGate';
 import LegalConsentGate from './LegalConsentGate';
 
@@ -108,7 +109,7 @@ export default function TelegramLoginButton({ referralCode }: TelegramLoginButto
         if (mountedRef.current) navigate('/');
       });
       if (needsConsent) return;
-      setOidcError(getApiErrorMessage(err, t('common.error')));
+      setOidcError(getLocalizedApiErrorMessage(err, t('common.error'), t));
     } finally {
       if (mountedRef.current) setOidcLoading(false);
     }
@@ -228,7 +229,7 @@ export default function TelegramLoginButton({ referralCode }: TelegramLoginButto
           navigate('/');
         });
         if (needsConsent) return;
-        setWidgetError(getApiErrorMessage(err, ''));
+        setWidgetError(getLocalizedApiErrorMessage(err, '', t));
       }
     };
 

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { isUncertainPurchaseOutcome } from '@/utils/api-error';
+import { hasUnknownManagedTraffic } from '@/utils/trafficAccounting';
 import { useTranslation } from 'react-i18next';
 import { useCurrency } from '../../../hooks/useCurrency';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -86,6 +88,7 @@ export function TrafficTopupSheet({
   });
 
   const purchaseMutation = useMutation({
+    retry: false,
     mutationFn: async (gb: number) => {
       const selectedPackage = trafficPackages?.find((pkg) => pkg.gb === gb);
       if (!selectedPackage) throw new Error(t('subscription.additionalOptions.trafficUnavailable'));
@@ -138,7 +141,9 @@ export function TrafficTopupSheet({
                   : t('subscription.network.lteUnavailable')
                 : t('subscription.additionalOptions.currentTrafficLimit', {
                     limit: subscription.traffic_limit_gb,
-                    used: subscription.traffic_used_gb.toFixed(1),
+                    used: hasUnknownManagedTraffic(subscription)
+                      ? '—'
+                      : subscription.traffic_used_gb.toFixed(1),
                   })}
             </div>
           </div>
@@ -306,7 +311,9 @@ export function TrafficTopupSheet({
 
           {purchaseMutation.isError && (
             <div className="text-center text-sm text-error-400">
-              {getErrorMessage(purchaseMutation.error)}
+              {isUncertainPurchaseOutcome(purchaseMutation.error)
+                ? t('subscription.purchaseOutcomeUnknown')
+                : getErrorMessage(purchaseMutation.error)}
             </div>
           )}
           {balanceError && missingFromError > 0 && !intentError && (

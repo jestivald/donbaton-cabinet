@@ -1,3 +1,5 @@
+import { hasUnknownManagedTraffic } from '@/utils/trafficAccounting';
+import ManagedTrafficSummary from '@/components/subscription/ManagedTrafficSummary';
 import { uiLocale } from '@/utils/uiLocale';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
@@ -21,6 +23,10 @@ interface SubscriptionCardActiveProps {
     traffic_used_gb: number;
     traffic_used_percent: number;
     is_unlimited: boolean;
+    traffic_accounting_mode?: 'legacy' | 'managed';
+    traffic_remaining_gb?: number | null;
+    base_traffic_remaining_gb?: number | null;
+    next_traffic_refresh_at?: string | null;
   } | null;
   refreshTrafficMutation: UseMutationResult<unknown, unknown, void, unknown>;
   trafficRefreshCooldown: number;
@@ -38,6 +44,7 @@ export default function SubscriptionCardActive({
   const { isDark } = useTheme();
   const g = getGlassColors(isDark);
 
+  const unknownTraffic = hasUnknownManagedTraffic(subscription, trafficData);
   const usedPercent = trafficData?.traffic_used_percent ?? subscription.traffic_used_percent;
   const usedGb = trafficData?.traffic_used_gb ?? subscription.traffic_used_gb;
   const isUnlimited = trafficData?.is_unlimited ?? subscription.traffic_limit_gb === 0;
@@ -111,7 +118,9 @@ export default function SubscriptionCardActive({
         {/* Big percentage / infinity */}
         {!category && (
           <div className="text-right">
-            {isUnlimited ? (
+            {unknownTraffic ? (
+              <span className="text-dark-400">—</span>
+            ) : isUnlimited ? (
               <>
                 <div
                   className="font-display text-[28px] font-extrabold leading-none tracking-tight"
@@ -143,12 +152,19 @@ export default function SubscriptionCardActive({
         {category ? (
           <NetworkTrafficSummary subscription={subscription} />
         ) : (
-          <TrafficProgressBar
-            usedGb={usedGb}
-            limitGb={subscription.traffic_limit_gb}
-            percent={usedPercent}
-            isUnlimited={isUnlimited}
-          />
+          <>
+            {unknownTraffic ? (
+              <div className="h-8" aria-hidden="true" />
+            ) : (
+              <TrafficProgressBar
+                usedGb={usedGb}
+                limitGb={subscription.traffic_limit_gb}
+                percent={usedPercent}
+                isUnlimited={isUnlimited}
+              />
+            )}
+            <ManagedTrafficSummary subscription={subscription} refreshed={trafficData} />
+          </>
         )}
       </div>
 

@@ -71,7 +71,12 @@ const lte = tariff({
   lte_traffic_limit_gb: 37,
   lte_period_days: 28,
 });
-const legacy = tariff({ id: 3, name: 'Архив LTE' });
+const legacy = tariff({
+  id: 3,
+  name: 'Архив LTE',
+  traffic_limit_gb: 123,
+  is_unlimited_traffic: false,
+});
 
 function catalog(props: Partial<TariffPickerGridProps> = {}) {
   return (
@@ -120,7 +125,8 @@ describe('network categories in the purchase and switch catalog', () => {
 
     selectTab('Другие тарифы');
     expect(screen.getByText('Архив LTE')).toBeTruthy();
-    expect(screen.getByText('Старый лимит')).toBeTruthy();
+    expect(screen.getByText('123 ГБ')).toBeTruthy();
+    expect(screen.queryByText('Старый лимит')).toBeNull();
     expect(screen.queryByText('Домашний')).toBeNull();
   });
 
