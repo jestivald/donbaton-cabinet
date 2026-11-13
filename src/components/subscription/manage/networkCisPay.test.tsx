@@ -162,7 +162,8 @@ describe('CisPay follows the network tariff policy', () => {
       expect(api.getCisPayRecurring).not.toHaveBeenCalled();
       expect(client.getQueryCache().findAll({ queryKey: ['cispay-recurring'] })).toHaveLength(0);
       expect(screen.queryByText('subscription.cispayRecurring.title')).toBeNull();
-      expect(screen.queryByText('subscription.cispayRecurring.setup')).toBeNull();
+      expect(screen.queryByText('subscription.cispayRecurring.period')).toBeNull();
+      expect(screen.queryByText('subscription.cispayRecurring.choose')).toBeNull();
       expect(api.getSbpRecurring).not.toHaveBeenCalled();
       expect(api.getLavaRecurring).not.toHaveBeenCalled();
       expect(api.getCasheraRecurring).not.toHaveBeenCalled();
@@ -171,7 +172,11 @@ describe('CisPay follows the network tariff policy', () => {
 
   it('keeps status requests and setup available for an ordinary subscription', async () => {
     panels(null);
-    expect(await screen.findByText('subscription.cispayRecurring.setup')).toBeTruthy();
+    // 1.82.1: подключение CisPay — прямо в панели (выбор периода + кнопка), без ссылки на покупку.
+    expect(await screen.findByText('subscription.cispayRecurring.period')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'subscription.cispayRecurring.choose' }),
+    ).toBeTruthy();
     expect(api.getCisPayRecurring).toHaveBeenCalledWith(42, undefined);
   });
 
